@@ -21,12 +21,12 @@ jobs:
     name: 密钥泄露扫描
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The scanner reads .env.local for its value comparison; CI has none, so it
       # falls back to shape-based detection (token prefixes, connection strings,
       # password hashes). That is the check that matters for a pull request.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -37,9 +37,9 @@ jobs:
     name: 类型检查 / 构建 / 测试
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
