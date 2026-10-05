@@ -1,0 +1,49 @@
+{
+  "name": "apk-dist",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Serverless multi-user app distribution platform (Vercel + Cloudflare R2)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "doctor": "node scripts/doctor.mjs",
+    "db:init": "node scripts/db-init.mjs",
+    "admin:hash": "node scripts/hash-password.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "test": "npm run test:apk && npm run test:sign",
+    "test:apk": "node --no-warnings scripts/test-apk-parser.mts",
+    "test:sign": "node --no-warnings scripts/test-r2-signing.mts",
+    "test:live": "node --no-warnings --dns-result-order=ipv4first scripts/test-live-e2e.mts",
+    "test:users": "node --no-warnings --dns-result-order=ipv4first scripts/test-multiuser-e2e.mts",
+    "test:presign": "node --no-warnings --dns-result-order=ipv4first scripts/test-presign.mts",
+    "test:upsert": "node --no-warnings scripts/test-upsert.mts",
+    "secret-scan": "node --no-warnings scripts/secret-scan.mts",
+    "inspect-apps": "node --no-warnings scripts/inspect-apps.mts",
+    "check-schema": "node --no-warnings scripts/check-schema.mts",
+    "cleanup:tests": "node --no-warnings scripts/cleanup-test-users.mts",
+    "r2:cors": "node --no-warnings scripts/r2-cors.mts",
+    "r2:list": "node --no-warnings scripts/r2-list.mts"
+  },
+  "dependencies": {
+    "next": "^16.3.8",
+    "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "slugify": "1.6.9",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.10.1",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #070b14;
+  --color-ink-900: #0d1322;
+  --color-ink-850: #121a2c;
+  --color-ink-800: #182238;
+  --color-ink-700: #24304b;
+  --color-brand-400: #5eead4;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei",
+    "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1100px 520px at 12% -10%, rgba(20, 184, 166, 0.16), transparent 60%),
+    radial-gradient(900px 460px at 88% 0%, rgba(99, 102, 241, 0.14), transparent 58%),
+    var(--color-ink-950);
+  color: #e6ebf5;
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+}
+
+/* Keep long package names and hashes from breaking the layout. */
+.break-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* Thin scrollbars for the screenshot strip. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 9999px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 0.35s ease-out both;
+}

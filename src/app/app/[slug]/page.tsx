@@ -1,0 +1,265 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getAppBySlug, isDatabaseConfigured } from "@/lib/db";
+import {
+  formatBytes,
+  formatDate,
+  formatPermission,
+  initialsFor,
+  mediaUrl,
+} from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+interface DetailProps {
+  params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: DetailProps): Promise<Metadata> {
+  const { slug } = await params;
+  if (!isDatabaseConfigured()) return { title: "应用详情" };
+
+  const app = await getAppBySlug(slug).catch(() => null);
+  if (!app) return { title: "应用不存在" };
+
+  return {
+    title: app.name,
+    description: app.summary || app.description || `${app.name} 下载`,
+  };
+}
+
+function SpecRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-white/5 py-2 last:border-0">
+      <dt className="shrink-0 text-sm text-slate-500">{label}</dt>
+      <dd className="break-anywhere text-right text-sm text-slate-200">{value}</dd>
+    </div>
+  );
+}
+
+export default async function AppDetailPage({ params }: DetailProps) {
+  const { slug } = await params;
+
+  if (!isDatabaseConfigured()) notFound();
+
+  const app = await getAppBySlug(slug).catch(() => null);
+  if (!app) notFound();
+
+  const screenshots = app.screenshots ?? [];
+  const permissions = app.permissions ?? [];
+  const canDownload = Boolean(app.apk_key);
+  const isWebApp = app.kind === "html";
+
+  return (
+    <div className="space-y-8">
+      <nav className="text-sm text-slate-500">
+        <Link href="/" className="hover:text-brand-400">
+          应用库
+        </Link>
+        <span className="mx-2">/</span>
+        <span className="text-slate-300">{app.name}</span>
+      </nav>
+
+      <section className="animate-rise flex flex-col gap-5 rounded-2xl border border-white/10 bg-ink-900/60 p-6 sm:flex-row">
+        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-ink-800">
+          {app.icon_key ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={mediaUrl(app.slug, "icon")}
+              alt={`${app.name} 图标`}
+              className="h-full w-full object-cover"
+              width={96}
+              height={96}
+            />
+          ) : (
+            <span className="grid h-full w-full place-items-center text-2xl font-semibold text-brand-400">
+              {initialsFor(app.name)}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">{app.name}</h1>
+          {app.package_name ? (
+            <p className="break-anywhere mt-1 font-mono text-xs text-slate-500">{app.package_name}</p>
+          ) : null}
+          <p className="mt-3 text-sm leading-relaxed text-slate-300">
+            {app.summary || app.description || "暂无简介"}
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            {app.version_name ? (
+              <span className="rounded-full bg-white/5 px-2.5 py-1">版本 {app.version_name}</span>
+            ) : null}
+            {app.apk_size ? (
+              <span className="rounded-full bg-white/5 px-2.5 py-1">{formatBytes(app.apk_size)}</span>
+            ) : null}
+            {app.category ? (
+              <span className="rounded-full bg-white/5 px-2.5 py-1">{app.category}</span>
+            ) : null}
+            <span className="rounded-full bg-white/5 px-2.5 py-1">
+              {app.download_count} 次下载
+            </span>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            {canDownload ? (
+              isWebApp ? (
+                <>
+                  <a
+                    href={`/view/${app.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brand-400"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14V3ZM5 5h5v2H7v10h10v-3h2v5H5V5Z"
+                      />
+                    </svg>
+                    打开 Web 应用
+                  </a>
+                  <a
+                    href={`/view/${app.slug}`}
+                    download
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-brand-500/40 hover:text-white"
+                  >
+                    下载源文件
+                  </a>
+                </>
+              ) : (
+                <a
+                  href={`/download/${app.slug}`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brand-400"
+                  download
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17.4l-4.7-4.7 1.4-1.4L12 13.6V3h0ZM5 19h14v2H5v-2Z"
+                    />
+                  </svg>
+                  下载 APK
+                </a>
+              )
+            ) : (
+              <span className="rounded-xl border border-white/10 px-5 py-2.5 text-sm text-slate-500">
+                暂无可下载文件
+              </span>
+            )}
+            {app.apk_sha256 ? (
+              <span className="break-anywhere font-mono text-[11px] text-slate-600">
+                SHA-256 {app.apk_sha256.slice(0, 16)}…
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {screenshots.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">应用截图</h2>
+          <div className="scroll-thin flex gap-3 overflow-x-auto pb-2">
+            {screenshots.map((_, index) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={index}
+                src={mediaUrl(app.slug, `screenshot-${index}`)}
+                alt={`${app.name} 截图 ${index + 1}`}
+                loading="lazy"
+                className="h-64 w-auto shrink-0 rounded-xl border border-white/10 bg-ink-900 object-contain"
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-white/10 bg-ink-900/50 p-5">
+          <h2 className="mb-3 text-lg font-semibold">应用信息</h2>
+          <dl>
+            <SpecRow label="应用名称" value={app.name} />
+            <SpecRow label="包名" value={app.package_name || "—"} />
+            <SpecRow label="版本名称" value={app.version_name || "—"} />
+            {isWebApp ? null : (
+              <>
+                <SpecRow label="版本号 (versionCode)" value={app.version_code ?? "—"} />
+              </>
+            )}
+            <SpecRow label="文件大小" value={formatBytes(app.apk_size)} />
+            {isWebApp ? (
+              <SpecRow label="运行方式" value="浏览器直接打开，无需安装" />
+            ) : (
+              <>
+                <SpecRow label="最低系统版本" value={app.min_sdk ? `Android API ${app.min_sdk}+` : "—"} />
+                <SpecRow label="目标系统版本" value={app.target_sdk ? `Android API ${app.target_sdk}` : "—"} />
+              </>
+            )}
+            <SpecRow label="更新日期" value={formatDate(app.updated_at)} />
+            <SpecRow label={isWebApp ? "打开次数" : "下载次数"} value={app.download_count} />
+          </dl>
+        </section>
+
+        <section className="space-y-6">
+          {app.description ? (
+            <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-5">
+              <h2 className="mb-3 text-lg font-semibold">应用介绍</h2>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
+                {app.description}
+              </p>
+            </div>
+          ) : null}
+
+          {isWebApp ? null : (
+            <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-5">
+              <h2 className="mb-3 text-lg font-semibold">
+                权限
+                {permissions.length > 0 ? (
+                  <span className="ml-2 text-sm font-normal text-slate-500">
+                    {permissions.length} 项
+                  </span>
+                ) : null}
+              </h2>
+              {permissions.length === 0 ? (
+                <p className="text-sm text-slate-500">未声明额外权限，或信息尚未录入。</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {permissions.map((permission) => (
+                    <span
+                      key={permission}
+                      title={permission}
+                      className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-300"
+                    >
+                      {formatPermission(permission)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-white/10 bg-ink-900/40 p-5 text-sm text-slate-400">
+        <h2 className="mb-2 text-base font-semibold text-slate-200">
+          {isWebApp ? "使用说明" : "安装提示"}
+        </h2>
+        {isWebApp ? (
+          <ol className="list-inside list-decimal space-y-1">
+            <li>点击「打开 Web 应用」会在新标签页中直接运行。</li>
+            <li>若上传的是 zip 压缩包，浏览器无法直接运行，请下载后自行解压部署。</li>
+            <li>为安全起见，页面运行在受限沙箱中，部分浏览器能力可能不可用。</li>
+          </ol>
+        ) : (
+          <ol className="list-inside list-decimal space-y-1">
+            <li>下载 APK 后，在手机上点击该文件进行安装。</li>
+            <li>系统可能提示「未知来源应用」，需要在设置中允许对应来源安装。</li>
+            <li>若安装失败，请先卸载已安装的同包名旧版本再重试。</li>
+          </ol>
+        )}
+      </section>
+    </div>
+  );
+}

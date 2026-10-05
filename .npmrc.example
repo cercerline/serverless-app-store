@@ -1,0 +1,18 @@
+# 可选的 npm 镜像配置
+#
+# 如果你在国内网络下安装依赖很慢（npm 官方源可能只有几十 KB/s），
+# 把本文件复制成 .npmrc 即可启用镜像源：
+#
+#   Windows:  copy .npmrc.example .npmrc
+#   mac/Linux: cp .npmrc.example .npmrc
+#
+# .npmrc 已被 .gitignore 忽略，不会影响其他人，也不会上传到仓库。
+# 依赖 Vercel 构建时使用的是 npm 官方源，两者解析结果一致。
+
+registry=https://registry.npmmirror.com
+
+# 网络不稳定时自动重试，避免大包（如 next 自带的原生二进制）下载中断。
+fetch-retries=5
+fetch-retry-mintimeout=20000
+fetch-retry-maxtimeout=180000
+fetch-timeout=600000

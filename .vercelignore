@@ -1,0 +1,26 @@
+# 绝不部署到 Vercel 的文件
+# 这些文件只存在于本地，用于本地开发与部署操作。
+# 线上环境的配置通过 Vercel 的 Environment Variables 注入。
+
+# 本地环境变量（含数据库密码、R2 密钥、管理员密码）
+.env
+.env.*
+!.env.example
+
+# 部署令牌
+.vercel-token.txt
+
+# 构建产物与依赖（Vercel 会自行安装与构建）
+node_modules
+.next
+out
+build
+dist
+
+# 版本控制目录
+.git
+.gitignore
+
+# 其他
+*.tsbuildinfo
+*.log
