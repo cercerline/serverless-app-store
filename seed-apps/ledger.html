@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>简易记账 · 三秒记一笔</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--in:#34d399;--out:#fb7185;--accent:#22d3ee}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:560px}
+  h1{font-size:20px;margin:0 0 16px;font-weight:600}
+  .summary{background:linear-gradient(135deg,#13203a,#0e1a30);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:14px}
+  .summary .big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+  .summary .big.neg{color:var(--out)}
+  .summary .big.pos{color:var(--in)}
+  .summary .lbl{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .split{display:flex;gap:16px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .split>div{flex:1}
+  .split b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+  .split span{color:var(--dim);font-size:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  .kind{display:flex;gap:8px;margin-bottom:14px}
+  .kind button{flex:1;background:#0a1120;border:1px solid var(--line);color:var(--dim);padding:11px;border-radius:11px;font-size:15px;font-family:inherit;cursor:pointer;transition:.15s}
+  .kind button.on.out{background:rgba(251,113,133,.14);border-color:rgba(251,113,133,.45);color:#fda4af;font-weight:600}
+  .kind button.on.in{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.45);color:#6ee7b7;font-weight:600}
+  label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  input,select{
+    width:100%;background:#0a1120;border:1px solid var(--line);border-radius:10px;
+    padding:11px 12px;color:var(--text);font-size:16px;font-family:inherit;outline:none;
+  }
+  input:focus,select:focus{border-color:rgba(34,211,238,.5)}
+  input[type=number]{font-variant-numeric:tabular-nums}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .chip{background:#0a1120;border:1px solid var(--line);color:var(--dim);padding:9px 4px;border-radius:10px;font-size:13px;font-family:inherit;cursor:pointer;text-align:center;transition:.15s}
+  .chip.on{background:rgba(34,211,238,.14);border-color:rgba(34,211,238,.45);color:#a5f3fc}
+  button.primary{width:100%;background:var(--accent);color:#06202a;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer}
+  button.primary:hover{filter:brightness(1.08)}
+  .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .head h2{font-size:15px;margin:0;font-weight:600;color:var(--dim)}
+  .tabs{display:flex;gap:6px}
+  .tabs button{background:none;border:0;color:#64748b;font-size:12px;font-family:inherit;padding:4px 8px;border-radius:7px;cursor:pointer}
+  .tabs button.on{background:rgba(255,255,255,.07);color:var(--text)}
+  .list{max-height:none}
+  .row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row .info{flex:1;min-width:0}
+  .row .info b{display:block;font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .info span{color:var(--dim);font-size:12px}
+  .row .amt{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .row .amt.out{color:var(--out)}
+  .row .amt.in{color:var(--in)}
+  .del{background:none;border:0;color:#475569;font-size:19px;cursor:pointer;padding:2px 6px;line-height:1}
+  .del:hover{color:#f87171}
+  .empty{color:var(--dim);font-size:14px;text-align:center;padding:28px 0;line-height:1.8}
+  .foot{font-size:12px;color:#4a5568;text-align:center;margin-top:20px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>简易记账</h1>
+
+  <div class="summary">
+    <div class="lbl" id="sumLbl">本月结余</div>
+    <div class="big" id="sumBig">¥0.00</div>
+    <div class="split">
+      <div><b style="color:var(--in)" id="sumIn">¥0.00</b><span>收入</span></div>
+      <div><b style="color:var(--out)" id="sumOut">¥0.00</b><span>支出</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="kind">
+      <button id="kOut" class="on out">支出</button>
+      <button id="kIn" class="in">收入</button>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label>金额</label>
+        <input type="number" id="amount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+      </div>
+      <div>
+        <label>日期</label>
+        <input type="date" id="date">
+      </div>
+    </div>
+
+    <label>分类</label>
+    <div class="grid3" id="cats"></div>
+
+    <label>备注（可选）</label>
+    <input type="text" id="note" maxlength="24" placeholder="例如：午饭">
+    <div style="height:12px"></div>
+    <button class="primary" id="add">记一笔</button>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <h2>明细</h2>
+      <div class="tabs">
+        <button id="mAll" class="on">全部</button>
+        <button id="mMonth">本月</button>
+        <button id="mToday">今天</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <p class="foot">数据保存在本机浏览器 · 不会上传 · 离线可用</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'ledger.v1';
+  var CATS = {
+    out: ['餐饮', '交通', '购物', '居住', '娱乐', '医疗', '学习', '其他'],
+    in: ['工资', '兼职', '红包', '报销', '其他']
+  };
+
+  var kind = 'out';
+  var cat = '餐饮';
+  var filter = 'all';
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } }
+  function save(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
+  function today() { return new Date().toISOString().slice(0, 10); }
+  function money(n) {
+    var s = Math.abs(n).toFixed(2);
+    var parts = s.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return '¥' + parts.join('.');
+  }
+
+  function renderCats() {
+    var box = $('cats');
+    box.innerHTML = '';
+    CATS[kind].forEach(function (name) {
+      var b = document.createElement('button');
+      b.className = 'chip' + (name === cat ? ' on' : '');
+      b.textContent = name;
+      b.onclick = function () { cat = name; renderCats(); };
+      box.appendChild(b);
+    });
+  }
+
+  function visible(items) {
+    var t = today();
+    var month = t.slice(0, 7);
+    if (filter === 'today') return items.filter(function (x) { return x.date === t; });
+    if (filter === 'month') return items.filter(function (x) { return x.date.slice(0, 7) === month; });
+    return items;
+  }
+
+  function render() {
+    var all = load();
+    var t = today();
+    var month = t.slice(0, 7);
+    var monthItems = all.filter(function (x) { return x.date.slice(0, 7) === month; });
+
+    var inc = monthItems.filter(function (x) { return x.kind === 'in'; })
+                        .reduce(function (s, x) { return s + x.amount; }, 0);
+    var exp = monthItems.filter(function (x) { return x.kind === 'out'; })
+                        .reduce(function (s, x) { return s + x.amount; }, 0);
+    var net = inc - exp;
+
+    $('sumBig').textContent = (net < 0 ? '-' : '') + money(net);
+    $('sumBig').className = 'big ' + (net < 0 ? 'neg' : net > 0 ? 'pos' : '');
+    $('sumIn').textContent = money(inc);
+    $('sumOut').textContent = money(exp);
+
+    var items = visible(all).sort(function (a, b) {
+      return a.date === b.date ? b.created - a.created : (a.date < b.date ? 1 : -1);
+    });
+
+    var list = $('list');
+    list.innerHTML = '';
+    if (!items.length) {
+      list.innerHTML = '<div class="empty">还没有记录<br>上面记一笔试试</div>';
+      return;
+    }
+    items.forEach(function (item) {
+      var row = document.createElement('div');
+      row.className = 'row';
+
+      var info = document.createElement('div');
+      info.className = 'info';
+      var b = document.createElement('b');
+      b.textContent = item.note || item.cat;
+      var span = document.createElement('span');
+      span.textContent = item.date.slice(5).replace('-', '/') + ' · ' + item.cat;
+      info.appendChild(b); info.appendChild(span);
+
+      var amt = document.createElement('div');
+      amt.className = 'amt ' + item.kind;
+      amt.textContent = (item.kind === 'in' ? '+' : '-') + money(item.amount).slice(1);
+
+      var del = document.createElement('button');
+      del.className = 'del'; del.textContent = '×';
+      del.onclick = function () {
+        save(load().filter(function (x) { return x.id !== item.id; }));
+        render();
+      };
+
+      row.appendChild(info); row.appendChild(amt); row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  $('kOut').onclick = function () {
+    kind = 'out'; cat = CATS.out[0];
+    $('kOut').className = 'on out'; $('kIn').className = 'in';
+    renderCats();
+  };
+  $('kIn').onclick = function () {
+    kind = 'in'; cat = CATS.in[0];
+    $('kIn').className = 'on in'; $('kOut').className = 'out';
+    renderCats();
+  };
+
+  $('add').onclick = function () {
+    var raw = $('amount').value.trim();
+    var amount = parseFloat(raw);
+    if (!raw || !isFinite(amount) || amount <= 0) {
+      alert('请填一个大于 0 的金额');
+      $('amount').focus();
+      return;
+    }
+    if (amount > 99999999) { alert('金额太大了'); return; }
+
+    var items = load();
+    items.push({
+      id: Date.now() + '' + Math.random().toString(36).slice(2, 6),
+      kind: kind, cat: cat,
+      // Round to cents so repeated additions cannot accumulate float drift.
+      amount: Math.round(amount * 100) / 100,
+      note: $('note').value.trim(),
+      date: $('date').value || today(),
+      created: Date.now()
+    });
+    save(items);
+    $('amount').value = '';
+    $('note').value = '';
+    render();
+    $('amount').focus();
+  };
+
+  $('mAll').onclick = function () { filter = 'all'; setTab(this); };
+  $('mMonth').onclick = function () { filter = 'month'; setTab(this); };
+  $('mToday').onclick = function () { filter = 'today'; setTab(this); };
+  function setTab(el) {
+    ['mAll', 'mMonth', 'mToday'].forEach(function (id) { $(id).className = ''; });
+    el.className = 'on';
+    render();
+  }
+
+  $('date').value = today();
+  renderCats();
+  render();
+})();
+</script>
+</body>
+</html>

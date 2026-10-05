@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>随机点名 · 上课抽人不用想</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:520px}
+  h1{font-size:20px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 18px}
+  .stage{
+    background:linear-gradient(135deg,#13203a,#0e1a30);border:1px solid var(--line);
+    border-radius:22px;height:210px;display:flex;align-items:center;justify-content:center;
+    margin-bottom:16px;overflow:hidden;position:relative;padding:16px;
+  }
+  .stage .name{
+    font-size:clamp(36px,11vw,58px);font-weight:700;letter-spacing:-1px;
+    text-align:center;line-height:1.2;word-break:break-all;transition:transform .12s;
+  }
+  .stage.rolling .name{color:var(--dim);opacity:.75}
+  .stage.picked{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.2),0 0 44px rgba(34,211,238,.13)}
+  .stage.picked .name{color:var(--accent);animation:pop .42s cubic-bezier(.2,1.6,.4,1)}
+  @keyframes pop{0%{transform:scale(.75)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
+  .stage .hint{color:#475569;font-size:15px}
+  button.primary{
+    width:100%;background:var(--accent);color:#06202a;border:0;border-radius:14px;padding:16px;
+    font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:16px;transition:filter .15s;
+  }
+  button.primary:hover{filter:brightness(1.08)}
+  button.primary:disabled{opacity:.55;cursor:default;filter:none}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .head h2{font-size:15px;margin:0;font-weight:600;color:var(--dim)}
+  textarea{
+    width:100%;min-height:170px;background:#0a1120;border:1px solid var(--line);border-radius:12px;
+    padding:12px;color:var(--text);font-size:15px;font-family:inherit;line-height:1.9;outline:none;resize:vertical;
+  }
+  textarea:focus{border-color:rgba(34,211,238,.5)}
+  .opts{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:14px;color:var(--dim)}
+  .opts label{display:flex;align-items:center;gap:7px;cursor:pointer}
+  .opts input{width:17px;height:17px;accent-color:var(--accent)}
+  .pill{background:rgba(255,255,255,.06);border-radius:99px;padding:2px 10px;font-size:12px;color:var(--dim)}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--dim);border-radius:9px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
+  button.ghost:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+  .history{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .history span{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);color:#a5f3fc;border-radius:99px;padding:4px 12px;font-size:13px}
+  .foot{font-size:12px;color:#4a5568;text-align:center;margin-top:20px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>随机点名</h1>
+  <p class="sub">名单粘贴进去，点一下随机抽人</p>
+
+  <div class="stage" id="stage">
+    <div class="hint" id="hint">先在下面粘贴名单</div>
+  </div>
+
+  <button class="primary" id="go" disabled>开始点名</button>
+
+  <div class="card">
+    <div class="head">
+      <h2>名单 <span class="pill" id="count">0 人</span></h2>
+      <button class="ghost" id="clear">清空</button>
+    </div>
+    <textarea id="names" placeholder="每行一个名字，或用逗号、空格分隔&#10;&#10;张三&#10;李四&#10;王五"></textarea>
+    <div class="opts">
+      <label><input type="checkbox" id="noRepeat" checked> 不重复抽取</label>
+      <label><input type="checkbox" id="sound" checked> 抽中时提示音</label>
+    </div>
+    <div class="history" id="history"></div>
+  </div>
+
+  <p class="foot">数据保存在本机浏览器 · 离线可用</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'picker.names.v1';
+  var PICKED = 'picker.picked.v1';
+
+  // Accepts newline, comma, Chinese comma, semicolon, tab or repeated spaces as
+  // separators, because a list pasted from Excel, WeChat or a doc all differ.
+  function parse(text) {
+    return text
+      .split(/[\n\r,，;；\t]+/)
+      .map(function (s) { return s.trim().replace(/\s+/g, ' '); })
+      .filter(function (s) { return s.length > 0 && s.length <= 20; });
+  }
+
+  function loadPicked() { try { return JSON.parse(localStorage.getItem(PICKED)) || []; } catch (e) { return []; } }
+  function savePicked(v) { try { localStorage.setItem(PICKED, JSON.stringify(v)); } catch (e) {} }
+
+  var names = [];
+  var picked = loadPicked();
+
+  function pool() {
+    if (!$('noRepeat').checked) return names.slice();
+    return names.filter(function (n) { return picked.indexOf(n) === -1; });
+  }
+
+  function renderCount() {
+    var left = pool().length;
+    $('count').textContent = names.length
+      ? names.length + ' 人' + ($('noRepeat').checked ? '（剩 ' + left + '）' : '')
+      : '0 人';
+    $('go').disabled = left === 0;
+  }
+
+  function renderHistory() {
+    var box = $('history');
+    box.innerHTML = '';
+    if (!picked.length) return;
+    picked.slice(-12).forEach(function (n) {
+      var s = document.createElement('span');
+      s.textContent = n;
+      box.appendChild(s);
+    });
+  }
+
+  function chime() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      [880, 1320].forEach(function (freq, i) {
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = freq;
+        var t0 = ctx.currentTime + i * 0.1;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t0); osc.stop(t0 + 0.28);
+      });
+      setTimeout(function () { ctx.close(); }, 900);
+    } catch (e) {}
+  }
+
+  function roll() {
+    var candidates = pool();
+    if (!candidates.length) return;
+
+    var stage = $('stage');
+    var nameEl = stage.querySelector('.name') || document.createElement('div');
+    nameEl.className = 'name';
+    if (!nameEl.parentNode) { stage.innerHTML = ''; stage.appendChild(nameEl); }
+
+    $('go').disabled = true;
+    stage.className = 'stage rolling';
+
+    // Roughly 1.6s of decelerating flicker: the easing makes the result feel
+    // drawn rather than random, even though every frame is a uniform pick.
+    var elapsed = 0;
+    var delay = 45;
+    var total = 1600;
+
+    (function step() {
+      nameEl.textContent = candidates[Math.floor(Math.random() * candidates.length)];
+      elapsed += delay;
+      if (elapsed < total) {
+        delay = 45 + Math.pow(elapsed / total, 3) * 210;
+        setTimeout(step, delay);
+      } else {
+        var winner = candidates[Math.floor(Math.random() * candidates.length)];
+        nameEl.textContent = winner;
+        stage.className = 'stage picked';
+        if ($('noRepeat').checked) {
+          picked.push(winner);
+          savePicked(picked);
+          renderHistory();
+          renderCount();
+        }
+        if ($('sound').checked) chime();
+        $('go').disabled = pool().length === 0;
+        if (pool().length === 0) {
+          $('go').textContent = '已全部抽完';
+          setTimeout(function () { $('go').textContent = '开始点名'; }, 2000);
+        }
+      }
+    })();
+  }
+
+  $('names').oninput = function () {
+    names = parse(this.value);
+    try { localStorage.setItem(KEY, this.value); } catch (e) {}
+    // A changed roster invalidates who was already drawn.
+    picked = picked.filter(function (n) { return names.indexOf(n) !== -1; });
+    savePicked(picked);
+    renderCount(); renderHistory();
+    if (names.length && !$('stage').querySelector('.name')) {
+      $('stage').innerHTML = '<div class="hint">准备好了，点下面开始</div>';
+    }
+  };
+
+  $('noRepeat').onchange = function () {
+    if (!this.checked) { picked = []; savePicked(picked); renderHistory(); }
+    renderCount();
+  };
+
+  $('go').onclick = roll;
+
+  $('clear').onclick = function () {
+    if (!confirm('清空名单和已抽记录？')) return;
+    $('names').value = ''; names = []; picked = [];
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    savePicked(picked);
+    $('stage').innerHTML = '<div class="hint">先在下面粘贴名单</div>';
+    renderCount(); renderHistory();
+  };
+
+  // Restore the previous roster so a teacher reopening the page mid-class does
+  // not have to paste the list again.
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { $('names').value = saved; names = parse(saved); }
+  } catch (e) {}
+
+  renderCount();
+  renderHistory();
+  if (names.length) $('stage').innerHTML = '<div class="hint">准备好了，点下面开始</div>';
+})();
+</script>
+</body>
+</html>

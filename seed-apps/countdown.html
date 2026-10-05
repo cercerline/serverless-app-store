@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>倒计时 · 重要日子还剩几天</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#0b1220; --card:#141d2f; --line:rgba(255,255,255,.09);
+    --text:#e8eefc; --dim:#8b9ab5; --accent:#22d3ee; --warn:#fbbf24; --done:#34d399;
+  }
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text); min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+    display:flex; justify-content:center;
+  }
+  .wrap{width:100%;max-width:560px}
+  h1{font-size:20px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 20px}
+  .hero{
+    background:linear-gradient(135deg,#13203a,#0e1a30); border:1px solid var(--line);
+    border-radius:20px; padding:32px 24px; text-align:center; margin-bottom:16px;
+  }
+  .hero .label{color:var(--dim);font-size:14px;margin-bottom:10px}
+  .hero .num{font-size:76px;font-weight:700;line-height:1;letter-spacing:-2px;font-variant-numeric:tabular-nums}
+  .hero .unit{font-size:22px;font-weight:400;color:var(--dim);margin-left:6px}
+  .hero .date{color:var(--dim);font-size:14px;margin-top:12px}
+  .bar{height:8px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;margin-top:20px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#34d399);transition:width .4s;border-radius:99px}
+  .bar-label{display:flex;justify-content:space-between;color:var(--dim);font-size:12px;margin-top:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:var(--dim);margin-bottom:6px}
+  input[type=text],input[type=date]{
+    width:100%;background:#0a1120;border:1px solid var(--line);border-radius:10px;
+    padding:11px 12px;color:var(--text);font-size:16px;font-family:inherit;outline:none;
+  }
+  input:focus{border-color:rgba(34,211,238,.5)}
+  .row{display:flex;gap:10px;margin-top:12px}
+  .row>*{flex:1}
+  button{
+    background:var(--accent);color:#06202a;border:0;border-radius:10px;padding:12px 16px;
+    font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+  .list{margin-top:4px}
+  .item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:0}
+  .item .n{flex:1;min-width:0}
+  .item .n b{display:block;font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .n span{color:var(--dim);font-size:12px}
+  .item .d{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .item.on .d{color:var(--accent)}
+  .item.over .d{color:var(--dim)}
+  .del{background:none;border:0;color:#64748b;font-size:20px;padding:4px 8px;cursor:pointer;line-height:1}
+  .del:hover{color:#f87171}
+  .empty{color:var(--dim);font-size:14px;text-align:center;padding:24px 0}
+  .foot{font-size:12px;text-align:center;color:#4a5568;margin-top:24px;line-height:1.7}
+  .note{background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.2);border-radius:12px;padding:12px;font-size:13px;color:#a5f3fc;margin-top:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>倒计时</h1>
+  <p class="sub">重要日子还剩几天，打开就知道</p>
+
+  <div class="hero">
+    <div class="label" id="heroName">还没有设置</div>
+    <div class="num" id="heroNum">—</div>
+    <div class="date" id="heroDate"></div>
+    <div class="bar" id="heroBar" style="display:none"><i style="width:0%"></i></div>
+    <div class="bar-label" id="heroBarLabel" style="display:none"><span></span><span></span></div>
+  </div>
+
+  <div class="card">
+    <label>添加一个日子</label>
+    <input type="text" id="name" placeholder="例如：考研初试" maxlength="20">
+    <div class="row">
+      <input type="date" id="date">
+      <button id="add" style="flex:0 0 96px">添加</button>
+    </div>
+    <div class="note">日期只存在你自己的手机里，不会上传到任何服务器。换个浏览器就看不到了。</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <label style="margin:0">我记录的日子</label>
+      <button class="ghost" id="clear" style="padding:6px 12px;font-size:12px">清空全部</button>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <p class="foot">数据保存在本机浏览器 · 离线可用</p>
+</div>
+
+<script>
+(function () {
+  var KEY = 'countdown.v1';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  }
+  function save(items) {
+    try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) {}
+  }
+
+  // Days between today and the target, counted by calendar date rather than by
+  // milliseconds so a DST shift cannot make a countdown off by one.
+  function daysUntil(dateStr) {
+    var parts = dateStr.split('-');
+    var target = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target - today) / 86400000);
+  }
+
+  function fmt(dateStr) {
+    var p = dateStr.split('-');
+    return p[0] + ' 年 ' + (+p[1]) + ' 月 ' + (+p[2]) + ' 日';
+  }
+
+  function render() {
+    var items = load().sort(function (a, b) { return daysUntil(a.date) - daysUntil(b.date); });
+
+    // Hero shows the nearest upcoming (or most recent past) entry.
+    var hero = null;
+    for (var i = 0; i < items.length; i++) {
+      if (daysUntil(items[i].date) >= 0) { hero = items[i]; break; }
+    }
+    if (!hero && items.length) hero = items[items.length - 1];
+
+    if (hero) {
+      var d = daysUntil(hero.date);
+      $('heroName').textContent = hero.name;
+      $('heroNum').innerHTML = d === 0
+        ? '今天'
+        : (d > 0 ? d + '<span class="unit">天</span>' : '<span style="color:#8b9ab5">已过 ' + (-d) + ' 天</span>');
+      $('heroDate').textContent = fmt(hero.date);
+      if (hero.start) {
+        var total = daysUntil(hero.date) - daysUntil(hero.start);
+        var left = daysUntil(hero.date);
+        if (total > 0) {
+          var pct = Math.max(0, Math.min(100, (1 - left / total) * 100));
+          $('heroBar').style.display = '';
+          $('heroBarLabel').style.display = '';
+          $('heroBar').firstElementChild.style.width = pct.toFixed(1) + '%';
+          $('heroBarLabel').firstElementChild.textContent = '开始 ' + fmt(hero.start);
+          $('heroBarLabel').lastElementChild.textContent = pct.toFixed(0) + '%';
+        }
+      } else {
+        $('heroBar').style.display = 'none';
+        $('heroBarLabel').style.display = 'none';
+      }
+    } else {
+      $('heroName').textContent = '还没有设置';
+      $('heroNum').textContent = '—';
+      $('heroDate').textContent = '';
+      $('heroBar').style.display = 'none';
+      $('heroBarLabel').style.display = 'none';
+    }
+
+    var list = $('list');
+    list.innerHTML = '';
+    if (!items.length) {
+      list.innerHTML = '<div class="empty">还没添加任何日子<br>上面填一个试试</div>';
+      return;
+    }
+    items.forEach(function (item) {
+      var d = daysUntil(item.date);
+      var row = document.createElement('div');
+      row.className = 'item' + (d === 0 ? ' on' : d < 0 ? ' over' : '');
+      var name = document.createElement('div');
+      name.className = 'n';
+      var b = document.createElement('b'); b.textContent = item.name;
+      var s = document.createElement('span'); s.textContent = fmt(item.date);
+      name.appendChild(b); name.appendChild(s);
+      var num = document.createElement('div');
+      num.className = 'd';
+      num.textContent = d === 0 ? '今天' : d > 0 ? d + ' 天' : '已过';
+      var del = document.createElement('button');
+      del.className = 'del'; del.textContent = '×'; del.title = '删除';
+      del.onclick = function () {
+        if (!confirm('删除「' + item.name + '」？')) return;
+        save(load().filter(function (x) { return x.id !== item.id; }));
+        render();
+      };
+      row.appendChild(name); row.appendChild(num); row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  $('add').onclick = function () {
+    var name = $('name').value.trim();
+    var date = $('date').value;
+    if (!name) { alert('请填一个名称，比如「考研初试」'); $('name').focus(); return; }
+    if (!date) { alert('请选择日期'); $('date').focus(); return; }
+    var items = load();
+    items.push({ id: Date.now() + '' + Math.random().toString(36).slice(2, 6), name: name, date: date, start: new Date().toISOString().slice(0, 10) });
+    save(items);
+    $('name').value = '';
+    $('date').value = '';
+    render();
+  };
+
+  $('clear').onclick = function () {
+    if (!load().length) return;
+    if (!confirm('确定清空全部记录？此操作无法撤销。')) return;
+    save([]);
+    render();
+  };
+
+  // Re-render when the page is restored from the bfcache (e.g. switching back to
+  // the tab the next morning), so the day count is never stale.
+  window.addEventListener('pageshow', render);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

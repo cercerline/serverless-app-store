@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>图片压缩 · 不上传服务器，本地就变小</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee;--ok:#34d399}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:560px}
+  h1{font-size:20px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 18px}
+  .drop{
+    border:2px dashed rgba(255,255,255,.15);border-radius:18px;padding:44px 20px;text-align:center;
+    cursor:pointer;transition:.2s;background:var(--card);margin-bottom:14px;
+  }
+  .drop:hover,.drop.over{border-color:rgba(34,211,238,.55);background:rgba(34,211,238,.05)}
+  .drop .icon{font-size:40px;margin-bottom:10px;opacity:.85}
+  .drop b{display:block;font-size:16px;font-weight:600;margin-bottom:5px}
+  .drop span{color:var(--dim);font-size:13px;line-height:1.6}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  .ctl{margin-bottom:16px}
+  .ctl:last-child{margin-bottom:0}
+  .ctl .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+  .ctl .top label{font-size:14px;color:var(--text)}
+  .ctl .top b{color:var(--accent);font-variant-numeric:tabular-nums;font-size:15px}
+  .ctl .hint{font-size:12px;color:var(--dim);margin-top:6px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:5px}
+  .seg{display:flex;gap:7px}
+  .seg button{
+    flex:1;background:#0a1120;border:1px solid var(--line);color:var(--dim);padding:10px 4px;
+    border-radius:10px;font-size:13px;font-family:inherit;cursor:pointer;transition:.15s;
+  }
+  .seg button.on{background:rgba(34,211,238,.14);border-color:rgba(34,211,238,.45);color:#a5f3fc;font-weight:600}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+  .item .head{display:flex;gap:13px;align-items:center;margin-bottom:12px}
+  .item .thumb{
+    width:62px;height:62px;border-radius:11px;object-fit:cover;background:#0a1120;flex:0 0 auto;
+  }
+  .item .info{flex:1;min-width:0}
+  .item .info b{display:block;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+  .item .info .nums{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .item .info .nums em{font-style:normal;color:var(--ok);font-weight:600}
+  .item .info .nums em.big{color:var(--accent)}
+  .item .btns{display:flex;gap:8px}
+  .item .btns button{
+    flex:1;border:0;border-radius:10px;padding:11px;font-size:14px;font-weight:600;
+    font-family:inherit;cursor:pointer;background:var(--accent);color:#06202a;
+  }
+  .item .btns button.alt{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:400}
+  .bar{height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:10px}
+  .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+  .note{background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.2);border-radius:12px;padding:12px;font-size:13px;color:#a5f3fc;line-height:1.65;margin-bottom:14px}
+  .foot{font-size:12px;color:#4a5568;text-align:center;margin-top:20px;line-height:1.7}
+  .empty{color:var(--dim);font-size:14px;text-align:center;padding:20px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>图片压缩</h1>
+  <p class="sub">拖进来就变小，图片不会离开你的设备</p>
+
+  <div class="note">
+    压缩全程在你的浏览器里完成，图片<b>不会上传到任何服务器</b>。
+    可以断网使用。
+  </div>
+
+  <div class="drop" id="drop">
+    <div class="icon">🖼️</div>
+    <b>点击选择图片，或拖进来</b>
+    <span>支持 JPG / PNG / WebP，可一次选多张</span>
+  </div>
+  <input type="file" id="file" accept="image/*" multiple hidden>
+
+  <div class="card">
+    <div class="ctl">
+      <div class="top"><label>画质</label><b id="qVal">75%</b></div>
+      <input type="range" id="quality" min="30" max="95" value="75">
+      <div class="hint">越低文件越小，但画质越差。一般 70–80 够用。</div>
+    </div>
+    <div class="ctl">
+      <div class="top"><label>最大边长</label><b id="sVal">1600 px</b></div>
+      <input type="range" id="maxside" min="640" max="4096" step="160" value="1600">
+      <div class="hint">超过这个尺寸会被等比缩小。手机截图一般 1080–1440。</div>
+    </div>
+    <div class="ctl">
+      <div class="top"><label>输出格式</label></div>
+      <div class="seg" id="fmt">
+        <button data-f="image/jpeg" class="on">JPEG</button>
+        <button data-f="image/webp">WebP</button>
+        <button data-f="image/png">PNG</button>
+      </div>
+      <div class="hint">WebP 体积最小，兼容性也已经很好了。</div>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+  <p class="foot">本地处理 · 无网络请求 · 离线可用</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var format = 'image/jpeg';
+  var results = [];
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(2) + ' MB';
+  }
+
+  function ext(mime) {
+    return mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+  }
+
+  // Draws through a canvas so the browser re-encodes the pixels; this is what
+  // actually shrinks the file.
+  function process(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+
+      img.onload = function () {
+        var maxSide = +$('maxside').value;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var scale = Math.min(1, maxSide / Math.max(w, h));
+        var tw = Math.max(1, Math.round(w * scale));
+        var th = Math.max(1, Math.round(h * scale));
+
+        var canvas = document.createElement('canvas');
+        canvas.width = tw; canvas.height = th;
+        var ctx = canvas.getContext('2d');
+        // JPEG has no alpha channel; a transparent PNG would otherwise turn black.
+        if (format === 'image/jpeg') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, tw, th);
+        }
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, tw, th);
+
+        canvas.toBlob(function (blob) {
+          URL.revokeObjectURL(url);
+          if (!blob) { resolve(null); return; }
+          resolve({
+            name: file.name.replace(/\.[^.]+$/, '') + '.' + ext(format),
+            size: blob.size, original: file.size,
+            width: tw, height: th,
+            srcW: w, srcH: h,
+            url: URL.createObjectURL(blob),
+            blob: blob
+          });
+        }, format, format === 'image/png' ? undefined : (+$('quality').value) / 100);
+      };
+
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  function render() {
+    var list = $('list');
+    list.innerHTML = '';
+
+    if (!results.length) {
+      list.innerHTML = '<div class="empty">还没有图片</div>';
+      return;
+    }
+
+    results.forEach(function (r, index) {
+      var card = document.createElement('div');
+      card.className = 'item';
+
+      var head = document.createElement('div');
+      head.className = 'head';
+
+      var thumb = document.createElement('img');
+      thumb.className = 'thumb';
+      thumb.src = r.url;
+      thumb.alt = '';
+
+      var info = document.createElement('div');
+      info.className = 'info';
+      var b = document.createElement('b');
+      b.textContent = r.name;
+
+      var ratio = r.original > 0 ? Math.round((1 - r.size / r.original) * 100) : 0;
+      var nums = document.createElement('div');
+      nums.className = 'nums';
+      nums.innerHTML = fmtSize(r.original) + ' → <em class="' + (ratio > 0 ? '' : 'big') + '">' +
+        fmtSize(r.size) + '</em>' + (ratio !== 0 ? '（' + (ratio > 0 ? '省 ' + ratio + '%' : '变大 ' + (-ratio) + '%') + '）' : '') +
+        '<br>' + r.srcW + '×' + r.srcH + ' → ' + r.width + '×' + r.height;
+
+      info.appendChild(b); info.appendChild(nums);
+
+      head.appendChild(thumb); head.appendChild(info);
+
+      var btns = document.createElement('div');
+      btns.className = 'btns';
+
+      var save = document.createElement('button');
+      save.textContent = '保存';
+      save.onclick = function () {
+        var a = document.createElement('a');
+        a.href = r.url; a.download = r.name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      };
+
+      var again = document.createElement('button');
+      again.className = 'alt';
+      again.textContent = '重新压缩';
+      again.onclick = function () {
+        // Re-encoding an already encoded file loses quality, so warn once.
+        if (r.blob && confirm('重新压缩会在这张已经压缩过的图上再压一次，画质会下降。继续？')) {
+          var f = new File([r.blob], r.name, { type: format });
+          process(f).then(function (nr) {
+            if (nr) { results[index] = nr; render(); }
+          });
+        }
+      };
+
+      btns.appendChild(save); btns.appendChild(again);
+
+      card.appendChild(head);
+      card.appendChild(btns);
+      list.appendChild(card);
+    });
+  }
+
+  function handle(files) {
+    var images = Array.prototype.filter.call(files, function (f) {
+      return f.type.indexOf('image/') === 0;
+    });
+    if (!images.length) { alert('请选择图片文件'); return; }
+
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.innerHTML = '<i></i>';
+    $('list').innerHTML = '';
+    $('list').appendChild(bar);
+
+    var done = 0;
+    var out = [];
+
+    // Sequential rather than parallel: decoding many large photos at once can
+    // exhaust memory on a phone.
+    (function next() {
+      if (done >= images.length) {
+        results = out;
+        render();
+        return;
+      }
+      process(images[done]).then(function (r) {
+        if (r) out.push(r);
+        done++;
+        bar.firstElementChild.style.width = (done / images.length * 100) + '%';
+        next();
+      });
+    })();
+  }
+
+  $('drop').onclick = function () { $('file').click(); };
+  $('file').onchange = function () {
+    if (this.files && this.files.length) handle(this.files);
+    this.value = '';
+  };
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    $('drop').addEventListener(ev, function (e) {
+      e.preventDefault(); $('drop').classList.add('over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    $('drop').addEventListener(ev, function (e) {
+      e.preventDefault(); $('drop').classList.remove('over');
+    });
+  });
+  $('drop').addEventListener('drop', function (e) {
+    if (e.dataTransfer && e.dataTransfer.files) handle(e.dataTransfer.files);
+  });
+
+  $('quality').oninput = function () { $('qVal').textContent = this.value + '%'; };
+  $('maxside').oninput = function () { $('sVal').textContent = this.value + ' px'; };
+
+  $('fmt').onclick = function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    format = btn.dataset.f;
+    Array.prototype.forEach.call(this.children, function (b) {
+      b.className = b === btn ? 'on' : '';
+    });
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

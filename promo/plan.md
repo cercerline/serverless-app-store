@@ -4,6 +4,41 @@
 **目标**：1000 访客 / 50 上传 / 1000 下载
 **预算**：0 元
 
+---
+
+## ✅ 当前进度（随时更新）
+
+| 项目 | 状态 |
+|---|---|
+| 种子应用（需 10 个） | ✅ **已完成 10 个** |
+| 站点 SEO 技术项 | ✅ 已完成（见 seo.md） |
+| 代码开源 | ✅ https://github.com/cercerline/serverless-app-store |
+| `www` 子域名 | ❌ 无 DNS 记录，需在阿里云加 CNAME |
+| 搜索引擎提交 | ❌ 待做 |
+| 平台账号注册 | ❌ 待做（V2EX 越早越好） |
+| **可以开始发帖** | ✅ Day 6 起可执行 |
+
+### 现有 10 个应用
+
+| 应用 | 地址 | 分类 | 目标人群 |
+|---|---|---|---|
+| 倒计时 | `/app/countdown` | 学习 | 考研党 |
+| 番茄钟 | `/app/pomodoro` | 效率 | 学生 / 打工人 |
+| 简易记账 | `/app/ledger` | 生活 | 通用 |
+| 课程表 | `/app/timetable` | 学习 | 大学生 |
+| 随机点名 | `/app/random-picker` | 教学 | 教师 |
+| 单位换算 | `/app/unit-converter` | 工具 | 通用 |
+| 密码生成器 | `/app/password-generator` | 工具 | 通用 |
+| 图片压缩 | `/app/image-compressor` | 工具 | 通用 |
+| 考研默写 | `/app/kaoyan-moxie` | 工具 | 考研党 |
+| 农学考研课堂 | `/app/nongxue-kaoyan` | 工具 | 农学考研 |
+
+HTML 工具源码在 `seed-apps/`，改完跑 `npm run publish:seeds` 即可重新发布（同 slug 会覆盖更新，不会产生重复）。
+
+> **Day 0–5 的准备工作已完成**，直接从 Day 6 开始发帖。
+
+---
+
 > ⚠️ **先修这个**：`www.xiaokaiqi.website` 没有 DNS 记录，打不开。所有推广文案统一用 **`https://xiaokaiqi.website`**（不带 www）。要修就去阿里云加一条 `www` 的 CNAME 指向 `cname.vercel-dns.com`。
 
 ---

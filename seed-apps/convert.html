@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>单位换算 · 长度重量温度一次搞定</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:520px}
+  h1{font-size:20px;margin:0 0 16px;font-weight:600}
+  .cats{display:flex;gap:7px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px;scrollbar-width:none}
+  .cats::-webkit-scrollbar{display:none}
+  .cats button{
+    flex:0 0 auto;background:#0a1120;border:1px solid var(--line);color:var(--dim);
+    padding:9px 17px;border-radius:99px;font-size:14px;font-family:inherit;cursor:pointer;transition:.15s;
+  }
+  .cats button.on{background:var(--accent);border-color:var(--accent);color:#06202a;font-weight:600}
+  .io{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:10px}
+  .io .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .io .top .lbl{font-size:12px;color:var(--dim)}
+  select{
+    background:#0a1120;border:1px solid var(--line);border-radius:9px;color:var(--text);
+    padding:7px 10px;font-size:14px;font-family:inherit;outline:none;max-width:60%;
+  }
+  input[type=text]{
+    width:100%;background:#0a1120;border:1px solid var(--line);border-radius:11px;
+    padding:14px;color:var(--text);font-size:26px;font-weight:600;font-family:inherit;
+    outline:none;font-variant-numeric:tabular-nums;
+  }
+  input[type=text]:focus{border-color:rgba(34,211,238,.5)}
+  #out{color:var(--accent)}
+  .swap{display:flex;justify-content:center;margin:-4px 0 6px}
+  .swap button{
+    background:#0a1120;border:1px solid var(--line);color:var(--dim);width:42px;height:42px;
+    border-radius:50%;font-size:17px;cursor:pointer;transition:.2s;font-family:inherit;
+  }
+  .swap button:hover{color:var(--accent);border-color:rgba(34,211,238,.45);transform:rotate(180deg)}
+  .quick{margin-top:14px}
+  .quick .t{font-size:12px;color:var(--dim);margin-bottom:8px}
+  .quick .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .quick .q{background:#0a1120;border:1px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;transition:.15s;text-align:left}
+  .quick .q:hover{border-color:rgba(34,211,238,.35)}
+  .quick .q b{display:block;font-size:14px;font-weight:600;color:var(--text)}
+  .quick .q span{font-size:11px;color:var(--dim)}
+  .foot{font-size:12px;color:#4a5568;text-align:center;margin-top:20px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>单位换算</h1>
+
+  <div class="cats" id="cats"></div>
+
+  <div class="io">
+    <div class="top">
+      <span class="lbl">从</span>
+      <select id="from"></select>
+    </div>
+    <input type="text" id="input" inputmode="decimal" value="1" autocomplete="off">
+  </div>
+
+  <div class="swap"><button id="swap" title="互换">⇅</button></div>
+
+  <div class="io">
+    <div class="top">
+      <span class="lbl">到</span>
+      <select id="to"></select>
+    </div>
+    <input type="text" id="out" readonly value="0">
+  </div>
+
+  <div class="card quick">
+    <div class="t">常用换算</div>
+    <div class="grid" id="quick"></div>
+  </div>
+
+  <p class="foot">离线可用 · 不含任何追踪</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Every category except temperature is a simple ratio to a base unit, which
+  // keeps the conversion itself a single multiply.
+  var CATS = [
+    { name: '长度', units: [
+      { n: '毫米', f: 0.001 }, { n: '厘米', f: 0.01 }, { n: '米', f: 1 },
+      { n: '千米', f: 1000 }, { n: '英寸', f: 0.0254 }, { n: '英尺', f: 0.3048 },
+      { n: '码', f: 0.9144 }, { n: '英里', f: 1609.344 }, { n: '海里', f: 1852 },
+      { n: '市里', f: 500 }, { n: '市尺', f: 1 / 3 }
+    ]},
+    { name: '重量', units: [
+      { n: '毫克', f: 0.000001 }, { n: '克', f: 0.001 }, { n: '千克', f: 1 },
+      { n: '吨', f: 1000 }, { n: '市斤', f: 0.5 }, { n: '两', f: 0.05 },
+      { n: '盎司', f: 0.028349523125 }, { n: '磅', f: 0.45359237 }
+    ]},
+    { name: '温度', special: true, units: [
+      { n: '摄氏度 °C' }, { n: '华氏度 °F' }, { n: '开尔文 K' }
+    ]},
+    { name: '面积', units: [
+      { n: '平方厘米', f: 0.0001 }, { n: '平方米', f: 1 }, { n: '平方千米', f: 1000000 },
+      { n: '公顷', f: 10000 }, { n: '亩', f: 666.6666666667 },
+      { n: '平方英尺', f: 0.09290304 }, { n: '平方英里', f: 2589988.110336 }
+    ]},
+    { name: '体积', units: [
+      { n: '毫升', f: 0.001 }, { n: '升', f: 1 }, { n: '立方米', f: 1000 },
+      { n: '加仑(美)', f: 3.785411784 }, { n: '加仑(英)', f: 4.54609 },
+      { n: '液量盎司(美)', f: 0.0295735295625 }
+    ]},
+    { name: '速度', units: [
+      { n: '米/秒', f: 1 }, { n: '千米/小时', f: 1 / 3.6 },
+      { n: '英里/小时', f: 0.44704 }, { n: '节', f: 0.514444444 }
+    ]},
+    { name: '数据', units: [
+      { n: '字节 B', f: 1 }, { n: 'KB', f: 1024 }, { n: 'MB', f: 1048576 },
+      { n: 'GB', f: 1073741824 }, { n: 'TB', f: 1099511627776 }
+    ]},
+    { name: '时间', units: [
+      { n: '秒', f: 1 }, { n: '分钟', f: 60 }, { n: '小时', f: 3600 },
+      { n: '天', f: 86400 }, { n: '周', f: 604800 }, { n: '年(365天)', f: 31536000 }
+    ]}
+  ];
+
+  var cat = 0;
+
+  // Temperature is affine, not proportional, so it gets its own pair of
+  // functions rather than a ratio.
+  function toC(v, u) { return u === 0 ? v : u === 1 ? (v - 32) * 5 / 9 : v - 273.15; }
+  function fromC(v, u) { return u === 0 ? v : u === 1 ? v * 9 / 5 + 32 : v + 273.15; }
+
+  function convert(value, fromIdx, toIdx) {
+    var c = CATS[cat];
+    if (c.special) return fromC(toC(value, fromIdx), toIdx);
+    return value * c.units[fromIdx].f / c.units[toIdx].f;
+  }
+
+  function fmt(n) {
+    if (!isFinite(n)) return '—';
+    var abs = Math.abs(n);
+    if (abs === 0) return '0';
+    // Very large and very small results are unreadable in fixed notation, so
+    // fall back to significant digits.
+    if (abs >= 1e9 || abs < 1e-6) return n.toExponential(6).replace(/e([+-])(\d+)/, 'e$1$2');
+    var s = n.toPrecision(10);
+    if (s.indexOf('.') !== -1) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s;
+  }
+
+  function fillSelect(el, selected) {
+    el.innerHTML = '';
+    CATS[cat].units.forEach(function (u, i) {
+      var o = document.createElement('option');
+      o.value = String(i); o.textContent = u.n;
+      if (i === selected) o.selected = true;
+      el.appendChild(o);
+    });
+  }
+
+  function calc() {
+    var raw = $('input').value.trim().replace(/,/g, '');
+    var v = parseFloat(raw);
+    if (raw === '' || raw === '-') { $('out').value = ''; return; }
+    if (!isFinite(v)) { $('out').value = '输入有误'; return; }
+    $('out').value = fmt(convert(v, +$('from').value, +$('to').value));
+  }
+
+  function renderQuick() {
+    var box = $('quick');
+    box.innerHTML = '';
+    var c = CATS[cat];
+    if (c.special) {
+      [[0, 100], [1, 0], [2, 0]].slice(0, 2).forEach(function (pair) {
+        var d = document.createElement('div');
+        d.className = 'q';
+        var b = document.createElement('b');
+        b.textContent = fmt(convert(pair[1], pair[0], pair[0] === 0 ? 1 : 0));
+        var s = document.createElement('span');
+        s.textContent = (pair[0] === 0 ? '100 °C' : '0 °F') + ' =';
+        d.appendChild(b); d.appendChild(s);
+        box.appendChild(d);
+      });
+      return;
+    }
+    var pairs = [[0, c.units.length - 1], [1, 2]];
+    pairs.forEach(function (pair) {
+      if (pair[0] >= c.units.length || pair[1] >= c.units.length) return;
+      var d = document.createElement('div');
+      d.className = 'q';
+      var b = document.createElement('b');
+      b.textContent = fmt(convert(1, pair[0], pair[1])) + ' ' + c.units[pair[1]].n;
+      var s = document.createElement('span');
+      s.textContent = '1 ' + c.units[pair[0]].n + ' =';
+      d.appendChild(b); d.appendChild(s);
+      d.onclick = function () {
+        $('from').value = String(pair[0]);
+        $('to').value = String(pair[1]);
+        $('input').value = '1';
+        calc();
+      };
+      box.appendChild(d);
+    });
+  }
+
+  function renderCats() {
+    var box = $('cats');
+    box.innerHTML = '';
+    CATS.forEach(function (c, i) {
+      var b = document.createElement('button');
+      b.textContent = c.name;
+      b.className = i === cat ? 'on' : '';
+      b.onclick = function () {
+        cat = i;
+        renderCats();
+        fillSelect($('from'), 0);
+        fillSelect($('to'), Math.min(1, CATS[cat].units.length - 1));
+        calc(); renderQuick();
+      };
+      box.appendChild(b);
+    });
+  }
+
+  $('from').onchange = calc;
+  $('to').onchange = calc;
+  $('input').oninput = calc;
+
+  $('swap').onclick = function () {
+    var a = $('from').value;
+    $('from').value = $('to').value;
+    $('to').value = a;
+    var outVal = $('out').value;
+    if (outVal && isFinite(parseFloat(outVal))) $('input').value = outVal;
+    calc();
+  };
+
+  renderCats();
+  fillSelect($('from'), 0);
+  fillSelect($('to'), 1);
+  calc();
+  renderQuick();
+})();
+</script>
+</body>
+</html>

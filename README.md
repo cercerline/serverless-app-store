@@ -16,8 +16,22 @@
 | --- | --- |
 | ![登录](docs/screenshots/login.png) | ![条款](docs/screenshots/terms.png) |
 
+上传的 HTML 应用在沙箱里直接运行（下图是站内的课程表应用）：
+
+![HTML 应用运行中](docs/screenshots/app-running.png)
+
 > 截图取自实际运行的站点。上传后的元数据（应用名、包名、版本、权限、图标）
 > 全部由解析器从 APK 中读出，上图中的「考研默写」没有任何字段是手填的。
+
+---
+
+## 内置的示例应用
+
+`seed-apps/` 下有 8 个可直接发布的单文件 HTML 应用：倒计时、番茄钟、简易记账、
+课程表、随机点名、单位换算、密码生成器、图片压缩。
+
+它们同时充当 HTML 应用的写法示范：**单文件、零依赖、离线可用、数据存 localStorage**。
+改完跑 `npm run check:seeds` 校验，再跑 `npm run publish:seeds` 发布到你的站点。
 
 ---
 

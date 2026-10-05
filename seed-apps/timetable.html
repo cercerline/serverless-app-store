@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>课程表 · 手机上看今天的课</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:620px}
+  h1{font-size:20px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+  .today{background:linear-gradient(135deg,#13203a,#0e1a30);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+  .today .lbl{color:var(--dim);font-size:13px;margin-bottom:10px}
+  .today .none{color:#475569;font-size:15px;padding:8px 0}
+  .cls{display:flex;gap:13px;align-items:baseline;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .cls:last-child{border-bottom:0}
+  .cls .t{color:var(--accent);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:94px}
+  .cls .n{flex:1;font-size:15px;font-weight:500}
+  .cls .loc{color:var(--dim);font-size:13px}
+  .cls.now .n{color:var(--accent);font-weight:600}
+  .cls.now .t{font-weight:700}
+  .badge{display:inline-block;background:rgba(34,211,238,.16);color:#a5f3fc;font-size:11px;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:1px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  .gridwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{border-collapse:separate;border-spacing:4px;width:100%;min-width:540px}
+  th{font-size:12px;color:var(--dim);font-weight:500;padding:5px 2px;text-align:center}
+  th.todaycol{color:var(--accent);font-weight:700}
+  td{padding:0;vertical-align:top}
+  .cell{
+    background:#0a1120;border:1px solid transparent;border-radius:9px;min-height:52px;padding:7px;
+    font-size:12px;line-height:1.4;cursor:pointer;transition:.15s;word-break:break-all;
+  }
+  .cell:hover{border-color:rgba(34,211,238,.35)}
+  .cell.has{background:rgba(34,211,238,.11);border-color:rgba(34,211,238,.28);color:#cffafe}
+  .cell .loc{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+  .cell.today{box-shadow:inset 0 0 0 1px rgba(34,211,238,.4)}
+  .rowlabel{font-size:11px;color:var(--dim);text-align:center;padding-top:16px;white-space:nowrap;line-height:1.5}
+  .toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .toolbar button{
+    background:#0a1120;border:1px solid var(--line);color:var(--dim);border-radius:10px;
+    padding:9px 14px;font-size:13px;font-family:inherit;cursor:pointer;transition:.15s;
+  }
+  .toolbar button:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+  .toolbar button.danger:hover{color:#f87171;border-color:rgba(248,113,113,.4)}
+  .hint{font-size:12px;color:var(--dim);line-height:1.7}
+  .foot{font-size:12px;color:#4a5568;text-align:center;margin-top:20px;line-height:1.7}
+
+  .sheet{position:fixed;inset:0;background:rgba(3,7,15,.72);display:none;align-items:flex-end;justify-content:center;z-index:20;padding:0}
+  .sheet.show{display:flex}
+  .sheet .panel{
+    background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:620px;
+    padding-bottom:calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;
+  }
+  .sheet h3{margin:0 0 4px;font-size:17px;font-weight:600}
+  .sheet .sub2{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .sheet label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  .sheet input{
+    width:100%;background:#0a1120;border:1px solid var(--line);border-radius:10px;
+    padding:11px 12px;color:var(--text);font-size:16px;font-family:inherit;outline:none;margin-bottom:12px;
+  }
+  .sheet input:focus{border-color:rgba(34,211,238,.5)}
+  .sheet .acts{display:flex;gap:10px;margin-top:4px}
+  .sheet .acts button{
+    flex:1;border:0;border-radius:12px;padding:14px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
+  }
+  .sheet .acts .ok{background:var(--accent);color:#06202a}
+  .sheet .acts .cancel{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:400}
+  .sheet .acts .del{background:rgba(248,113,113,.12);color:#fca5a5;border:1px solid rgba(248,113,113,.3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>课程表</h1>
+  <p class="sub">点格子填课，打开就知道今天上什么</p>
+
+  <div class="today" id="today"></div>
+
+  <div class="card">
+    <div class="toolbar">
+      <button id="copyMon">把周一的课复制到全周</button>
+      <button id="clearAll" class="danger">清空全部</button>
+    </div>
+    <div class="gridwrap">
+      <table id="table"></table>
+    </div>
+    <p class="hint" style="margin-top:12px">
+      点任意格子添加或修改课程。数据存在你自己的手机里，换设备不会同步。
+    </p>
+  </div>
+
+  <p class="foot">数据保存在本机浏览器 · 离线可用</p>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <h3 id="sheetTitle">添加课程</h3>
+    <p class="sub2" id="sheetSub"></p>
+    <label>课程名称</label>
+    <input type="text" id="cName" maxlength="16" placeholder="例如：高等数学">
+    <label>地点 / 老师（可选）</label>
+    <input type="text" id="cLoc" maxlength="14" placeholder="例如：教三 201">
+    <div class="acts">
+      <button class="cancel" id="cCancel">取消</button>
+      <button class="del" id="cDel" style="display:none">删除</button>
+      <button class="ok" id="cOk">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'timetable.v1';
+
+  var DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  var PERIODS = [
+    { label: '第 1 节', time: '08:00' },
+    { label: '第 2 节', time: '08:55' },
+    { label: '第 3 节', time: '10:00' },
+    { label: '第 4 节', time: '10:55' },
+    { label: '第 5 节', time: '14:00' },
+    { label: '第 6 节', time: '14:55' },
+    { label: '第 7 节', time: '16:00' },
+    { label: '第 8 节', time: '16:55' },
+    { label: '第 9 节', time: '19:00' },
+    { label: '第 10 节', time: '19:55' },
+    { label: '第 11 节', time: '20:50' },
+    { label: '第 12 节', time: '21:45' }
+  ];
+
+  // Only slots the student actually fills are stored, keyed `day-period`.
+  var data = {};
+  try { data = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { data = {}; }
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+
+  // JS weeks start on Sunday; the grid starts on Monday.
+  function todayIndex() {
+    var d = new Date().getDay();
+    return d === 0 ? 6 : d - 1;
+  }
+
+  function minutesNow() { var n = new Date(); return n.getHours() * 60 + n.getMinutes(); }
+  function toMin(hhmm) { var p = hhmm.split(':'); return +p[0] * 60 + +p[1]; }
+
+  function currentPeriod() {
+    var now = minutesNow();
+    for (var i = PERIODS.length - 1; i >= 0; i--) {
+      if (now >= toMin(PERIODS[i].time)) return i;
+    }
+    return -1;
+  }
+
+  function renderToday() {
+    var di = todayIndex();
+    var nowP = currentPeriod();
+    var items = [];
+    for (var p = 0; p < PERIODS.length; p++) {
+      var c = data[di + '-' + p];
+      if (c && c.name) items.push({ p: p, c: c });
+    }
+
+    var box = $('today');
+    var html = '<div class="lbl">今天是' + DAYS[di] +
+      (items.length ? '，共 ' + items.length + ' 节课' : '') + '</div>';
+
+    if (!items.length) {
+      html += '<div class="none">今天没课 🎉</div>';
+    } else {
+      items.forEach(function (it) {
+        var isNow = it.p === nowP;
+        html += '<div class="cls' + (isNow ? ' now' : '') + '">' +
+          '<span class="t">' + PERIODS[it.p].time + '</span>' +
+          '<span class="n">' + esc(it.c.name) +
+          (isNow ? '<span class="badge">正在进行</span>' : '') + '</span>' +
+          (it.c.loc ? '<span class="loc">' + esc(it.c.loc) + '</span>' : '') +
+          '</div>';
+      });
+    }
+    box.innerHTML = html;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  function renderTable() {
+    var di = todayIndex();
+    var nowP = currentPeriod();
+    var html = '<thead><tr><th></th>';
+    DAYS.forEach(function (d, i) {
+      html += '<th class="' + (i === di ? 'todaycol' : '') + '">' + d + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    PERIODS.forEach(function (per, p) {
+      html += '<tr><td class="rowlabel">' + per.label + '<br>' + per.time + '</td>';
+      for (var d = 0; d < 7; d++) {
+        var c = data[d + '-' + p];
+        var cls = 'cell' + (c && c.name ? ' has' : '') + (d === di && p === nowP ? ' today' : '');
+        html += '<td><div class="' + cls + '" data-d="' + d + '" data-p="' + p + '">' +
+          (c && c.name ? esc(c.name) + (c.loc ? '<span class="loc">' + esc(c.loc) + '</span>' : '') : '') +
+          '</div></td>';
+      }
+      html += '</tr>';
+    });
+
+    $('table').innerHTML = html + '</tbody>';
+  }
+
+  function render() { renderToday(); renderTable(); }
+
+  // ---- editor sheet ----
+  var editing = null;
+
+  function openSheet(d, p) {
+    editing = { d: d, p: p };
+    var c = data[d + '-' + p] || { name: '', loc: '' };
+    $('sheetTitle').textContent = c.name ? '编辑课程' : '添加课程';
+    $('sheetSub').textContent = DAYS[d] + ' · ' + PERIODS[p].label + '（' + PERIODS[p].time + '）';
+    $('cName').value = c.name || '';
+    $('cLoc').value = c.loc || '';
+    $('cDel').style.display = c.name ? '' : 'none';
+    $('sheet').classList.add('show');
+    setTimeout(function () { $('cName').focus(); }, 120);
+  }
+
+  function closeSheet() {
+    $('sheet').classList.remove('show');
+    editing = null;
+  }
+
+  $('table').onclick = function (e) {
+    var cell = e.target.closest('.cell');
+    if (!cell) return;
+    openSheet(+cell.dataset.d, +cell.dataset.p);
+  };
+
+  $('cOk').onclick = function () {
+    if (!editing) return;
+    var name = $('cName').value.trim();
+    if (!name) { data[editing.d + '-' + editing.p] = null; delete data[editing.d + '-' + editing.p]; }
+    else { data[editing.d + '-' + editing.p] = { name: name, loc: $('cLoc').value.trim() }; }
+    save(); closeSheet(); render();
+  };
+
+  $('cDel').onclick = function () {
+    if (!editing) return;
+    delete data[editing.d + '-' + editing.p];
+    save(); closeSheet(); render();
+  };
+
+  $('cCancel').onclick = closeSheet;
+  $('sheet').onclick = function (e) { if (e.target === $('sheet')) closeSheet(); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+
+  $('copyMon').onclick = function () {
+    var has = false;
+    for (var p = 0; p < PERIODS.length; p++) if (data['0-' + p] && data['0-' + p].name) has = true;
+    if (!has) { alert('周一还没有课，先填周一'); return; }
+    if (!confirm('把周一的课程复制到周二到周日？会覆盖这些天已有的课。')) return;
+    for (var d = 1; d < 7; d++) {
+      for (var p2 = 0; p2 < PERIODS.length; p2++) {
+        var src = data['0-' + p2];
+        if (src && src.name) data[d + '-' + p2] = { name: src.name, loc: src.loc };
+        else delete data[d + '-' + p2];
+      }
+    }
+    save(); render();
+  };
+
+  $('clearAll').onclick = function () {
+    if (!confirm('清空整张课程表？此操作无法撤销。')) return;
+    data = {}; save(); render();
+  };
+
+  render();
+
+  // The "正在进行" marker and the "today" column both depend on the clock, so a
+  // page left open across a period boundary needs to catch up.
+  setInterval(render, 60000);
+  window.addEventListener('pageshow', render);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });
+})();
+</script>
+</body>
+</html>

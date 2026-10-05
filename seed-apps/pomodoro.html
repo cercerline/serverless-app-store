@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>番茄钟 · 25 分钟专注</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#0b1220;--card:#141d2f;--line:rgba(255,255,255,.09);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee;--break:#34d399}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+    display:flex;justify-content:center;align-items:center;
+  }
+  .wrap{width:100%;max-width:480px;text-align:center}
+  .tabs{display:inline-flex;gap:4px;background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:28px}
+  .tabs button{
+    background:none;border:0;color:var(--dim);padding:8px 20px;border-radius:9px;
+    font-size:14px;font-family:inherit;cursor:pointer;transition:.15s;
+  }
+  .tabs button.on{background:var(--accent);color:#06202a;font-weight:600}
+  .tabs button.on.rest{background:var(--break)}
+  .ring{position:relative;width:min(78vw,300px);aspect-ratio:1;margin:0 auto 28px}
+  .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring .track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:10}
+  .ring .prog{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .35s linear,stroke .3s}
+  .ring.rest .prog{stroke:var(--break)}
+  .ring .inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .time{font-size:clamp(44px,14vw,64px);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-2px;line-height:1}
+  .phase{color:var(--dim);font-size:14px;margin-top:10px}
+  .actions{display:flex;gap:12px;justify-content:center;margin-bottom:24px}
+  .actions button{
+    border:0;border-radius:14px;padding:15px 0;width:130px;font-size:16px;font-weight:600;
+    font-family:inherit;cursor:pointer;transition:filter .15s;
+  }
+  .actions button:hover{filter:brightness(1.08)}
+  #toggle{background:var(--accent);color:#06202a}
+  #toggle.rest{background:var(--break)}
+  #reset{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:left}
+  .stats{display:flex;gap:12px;margin-bottom:14px}
+  .stat{flex:1;background:#0a1120;border-radius:12px;padding:12px;text-align:center}
+  .stat b{display:block;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--dim);font-size:12px}
+  label{display:block;font-size:13px;color:var(--dim);margin-bottom:6px}
+  .cfg{display:flex;gap:10px;margin-bottom:12px}
+  .cfg>div{flex:1}
+  input[type=number]{
+    width:100%;background:#0a1120;border:1px solid var(--line);border-radius:10px;
+    padding:10px;color:var(--text);font-size:15px;font-family:inherit;outline:none;text-align:center;
+  }
+  input:focus{border-color:rgba(34,211,238,.5)}
+  .tip{color:var(--dim);font-size:12px;line-height:1.7}
+  .foot{font-size:12px;color:#4a5568;margin-top:20px}
+  .toast{
+    position:fixed;left:50%;bottom:32px;transform:translateX(-50%) translateY(80px);
+    background:#22d3ee;color:#06202a;padding:12px 24px;border-radius:99px;font-size:14px;font-weight:600;
+    transition:transform .3s;z-index:9;pointer-events:none;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs">
+    <button id="tabWork" class="on">专注 25 分</button>
+    <button id="tabRest">休息 5 分</button>
+  </div>
+
+  <div class="ring" id="ring">
+    <svg viewBox="0 0 200 200">
+      <circle class="track" cx="100" cy="100" r="88"></circle>
+      <circle class="prog" id="prog" cx="100" cy="100" r="88"
+              stroke-dasharray="552.9" stroke-dashoffset="0"></circle>
+    </svg>
+    <div class="inner">
+      <div class="time" id="time">25:00</div>
+      <div class="phase" id="phase">准备开始</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="toggle">开始</button>
+    <button id="reset">重置</button>
+  </div>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><b id="doneCount">0</b><span>今天完成</span></div>
+      <div class="stat"><b id="totalMin">0</b><span>专注分钟</span></div>
+    </div>
+    <div class="cfg">
+      <div>
+        <label>专注（分钟）</label>
+        <input type="number" id="workMin" value="25" min="1" max="120">
+      </div>
+      <div>
+        <label>休息（分钟）</label>
+        <input type="number" id="restMin" value="5" min="1" max="60">
+      </div>
+    </div>
+    <p class="tip">
+      修改时长会重置当前计时。每完成一个专注时段会自动切到休息，
+      休息结束再切回专注。数据只存在本机。
+    </p>
+  </div>
+
+  <p class="foot">数据保存在本机浏览器 · 离线可用</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var CIRC = 2 * Math.PI * 88;
+  var STAT_KEY = 'pomodoro.stats.v1';
+  var CFG_KEY = 'pomodoro.cfg.v1';
+
+  var cfg = { work: 25, rest: 5 };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem(CFG_KEY)) || {}); } catch (e) {}
+
+  var isRest = false;
+  var remaining = cfg.work * 60;
+  var running = false;
+  var endsAt = 0;          // wall-clock deadline, so background tabs stay accurate
+  var ticker = null;
+
+  function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+  function loadStats() {
+    try {
+      var s = JSON.parse(localStorage.getItem(STAT_KEY));
+      if (s && s.day === todayKey()) return s;
+    } catch (e) {}
+    return { day: todayKey(), count: 0, minutes: 0 };
+  }
+  function saveStats(s) { try { localStorage.setItem(STAT_KEY, JSON.stringify(s)); } catch (e) {} }
+
+  function renderStats() {
+    var s = loadStats();
+    $('doneCount').textContent = s.count;
+    $('totalMin').textContent = s.minutes;
+  }
+
+  function totalSeconds() { return (isRest ? cfg.rest : cfg.work) * 60; }
+
+  function paint() {
+    var m = Math.floor(remaining / 60);
+    var sec = remaining % 60;
+    $('time').textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+    var ratio = totalSeconds() > 0 ? remaining / totalSeconds() : 0;
+    $('prog').setAttribute('stroke-dashoffset', String(CIRC * (1 - ratio)));
+    document.title = (running ? $('time').textContent + ' · ' : '') + (isRest ? '休息' : '专注') + ' · 番茄钟';
+  }
+
+  function paintMode() {
+    $('ring').className = 'ring' + (isRest ? ' rest' : '');
+    $('toggle').className = isRest ? 'rest' : '';
+    $('toggle').textContent = running ? '暂停' : '开始';
+    $('tabWork').className = isRest ? '' : 'on';
+    $('tabRest').className = isRest ? 'on rest' : '';
+    $('phase').textContent = running ? (isRest ? '休息中' : '专注中') : '准备开始';
+    paint();
+  }
+
+  function toast(text) {
+    var el = $('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    setTimeout(function () { el.classList.remove('show'); }, 2600);
+  }
+
+  // A short synthesised chime avoids bundling an audio file, and works offline.
+  function chime() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      [0, 0.18, 0.36].forEach(function (delay, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = isRest ? 660 : 880 - i * 80;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.32);
+      });
+      setTimeout(function () { ctx.close(); }, 1200);
+    } catch (e) {}
+  }
+
+  function finish() {
+    running = false;
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    chime();
+
+    if (!isRest) {
+      var s = loadStats();
+      s.count += 1;
+      s.minutes += cfg.work;
+      saveStats(s);
+      renderStats();
+    }
+
+    var wasRest = isRest;
+    isRest = !isRest;
+    remaining = totalSeconds();
+    paintMode();
+    toast(wasRest ? '休息结束，开始专注' : '专注完成！休息一下');
+  }
+
+  function tick() {
+    var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+    if (left !== remaining) { remaining = left; paint(); }
+    if (left <= 0) finish();
+  }
+
+  function start() {
+    running = true;
+    endsAt = Date.now() + remaining * 1000;
+    if (ticker) clearInterval(ticker);
+    ticker = setInterval(tick, 250);
+    paintMode();
+  }
+
+  function pause() {
+    running = false;
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    paintMode();
+  }
+
+  function reset() {
+    pause();
+    remaining = totalSeconds();
+    paintMode();
+  }
+
+  $('toggle').onclick = function () { running ? pause() : start(); };
+  $('reset').onclick = reset;
+
+  $('tabWork').onclick = function () { isRest = false; reset(); };
+  $('tabRest').onclick = function () { isRest = true; reset(); };
+
+  function readCfg() {
+    var w = parseInt($('workMin').value, 10);
+    var r = parseInt($('restMin').value, 10);
+    cfg.work = isFinite(w) && w > 0 && w <= 120 ? w : 25;
+    cfg.rest = isFinite(r) && r > 0 && r <= 60 ? r : 5;
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {}
+    reset();
+  }
+  $('workMin').onchange = readCfg;
+  $('restMin').onchange = readCfg;
+  $('workMin').value = cfg.work;
+  $('restMin').value = cfg.rest;
+
+  renderStats();
+  paintMode();
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,12 @@ import type { MetadataRoute } from "next";
 import { listApps } from "@/lib/db";
 import { siteUrl } from "@/lib/site";
 
+// Prerendering this at build time would freeze the catalogue as it looked during
+// the build, so every app published afterwards would be missing from the sitemap
+// until the next deploy. Crawlers request this rarely, so querying on demand
+// costs almost nothing and is always correct.
+export const dynamic = "force-dynamic";
+
 /**
  * sitemap.xml.
  *
