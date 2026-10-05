@@ -1,17 +1,42 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { SITE_DESCRIPTION, SITE_KEYWORDS, SITE_NAME, SITE_TAGLINE, siteUrl } from "@/lib/site";
 import "./globals.css";
 
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME?.trim() || "应用分发中心";
+const siteName = SITE_NAME;
 
 export const metadata: Metadata = {
+  // Makes every relative URL below resolve to an absolute one, which is what
+  // crawlers and social cards require.
+  metadataBase: new URL(siteUrl()),
   title: {
-    default: siteName,
+    default: `${siteName} — ${SITE_TAGLINE}`,
     template: `%s · ${siteName}`,
   },
-  description: "浏览、搜索并下载 Android 应用（APK）。",
-  robots: { index: true, follow: true },
+  description: SITE_DESCRIPTION,
+  keywords: SITE_KEYWORDS,
+  applicationName: siteName,
+  alternates: { canonical: "/" },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
+  openGraph: {
+    type: "website",
+    siteName,
+    locale: "zh_CN",
+    url: siteUrl(),
+    title: `${siteName} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${siteName} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+  },
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
 export const viewport: Viewport = {

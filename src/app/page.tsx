@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppCard } from "@/components/AppCard";
 import { SearchBox } from "@/components/SearchBox";
 import { isDatabaseConfigured, listApps } from "@/lib/db";
+import { JsonLd, websiteJsonLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -87,16 +88,17 @@ export default async function HomePage({ searchParams }: HomeProps) {
 
   return (
     <div className="space-y-6">
+      <JsonLd json={websiteJsonLd()} />
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              {query ? "搜索结果" : "应用库"}
+              {query ? "搜索结果" : "AI 应用库"}
             </h1>
             <p className="mt-1 text-sm text-slate-400">
               {query
                 ? `“${query}” 共 ${apps.length} 个结果`
-                : `共 ${apps.length} 个已发布应用，点击卡片查看详情与下载`}
+                : `共 ${apps.length} 个已发布应用，全部由用户用 AI 制作并免费分享`}
             </p>
           </div>
           <div className="w-full sm:w-80">
