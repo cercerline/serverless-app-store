@@ -6,6 +6,21 @@
 
 ---
 
+## 界面
+
+| 应用库（访客） | 应用详情 |
+| --- | --- |
+| ![应用库](docs/screenshots/home.png) | ![应用详情](docs/screenshots/app-detail.png) |
+
+| 登录 | 免责声明与使用条款 |
+| --- | --- |
+| ![登录](docs/screenshots/login.png) | ![条款](docs/screenshots/terms.png) |
+
+> 截图取自实际运行的站点。上传后的元数据（应用名、包名、版本、权限、图标）
+> 全部由解析器从 APK 中读出，上图中的「考研默写」没有任何字段是手填的。
+
+---
+
 ## 它解决的具体问题
 
 | 问题 | 做法 |

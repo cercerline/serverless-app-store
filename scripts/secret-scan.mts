@@ -56,16 +56,24 @@ function fragments(key: string, value: string): string[] {
   return out.filter((f) => f.length >= 8).map((f) => f.trim()).filter(Boolean);
 }
 
-/** Files Git would include in a commit (staged + untracked, honouring .gitignore). */
+/**
+ * Files worth scanning: everything Git tracks or would track.
+ *
+ * `git ls-files` is the right source rather than `git status`, because in CI the
+ * working tree is clean — `git status` would report nothing and the scan would
+ * silently pass over an empty list, which is the one outcome a security check
+ * must never produce.
+ */
 function committableFiles(): string[] {
-  const raw = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  const raw = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard"],
+    { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+  );
   return raw
     .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => line.slice(3).trim().replace(/^"(.*)"$/, "$1"))
+    .map((line) => line.trim().replace(/^"(.*)"$/, "$1"))
+    .filter(Boolean)
     .filter((path) => {
       try {
         return statSync(path).isFile();
@@ -78,11 +86,17 @@ function committableFiles(): string[] {
 const secrets = readEnvLocal();
 const files = committableFiles();
 
-console.log(`待提交文件：${files.length} 个`);
+console.log(`待扫描文件：${files.length} 个`);
 console.log(`从 .env.local 提取到 ${secrets.size} 项配置\n`);
 
+if (files.length === 0) {
+  console.error("✗ 没有找到任何可扫描的文件 —— 这通常意味着不在 Git 仓库里。");
+  process.exit(1);
+}
+
 if (secrets.size === 0) {
-  console.log("提示：未找到 .env.local，无法比对真实密钥。");
+  console.log("提示：未找到 .env.local，跳过与真实密钥的比对（CI 环境下属正常）。");
+  console.log("      特征扫描仍会执行。\n");
 }
 
 const hits: Array<{ file: string; key: string; sample: string }> = [];

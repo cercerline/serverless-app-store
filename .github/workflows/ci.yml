@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs first and needs no install, so a leaked credential is reported within
+  # seconds instead of after a full build.
+  secrets:
+    name: 密钥泄露扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The scanner reads .env.local for its value comparison; CI has none, so it
+      # falls back to shape-based detection (token prefixes, connection strings,
+      # password hashes). That is the check that matters for a pull request.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 扫描提交内容中的密钥
+        run: node --no-warnings scripts/secret-scan.mts
+
+  verify:
+    name: 类型检查 / 构建 / 测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # Uses the lockfile, so a dependency that resolves differently than it did
+      # locally fails here rather than in production.
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      # Deliberately run with no environment variables: the application must
+      # build without any secrets configured, and this job proves it stays that
+      # way. If a future change makes the build require a credential, forks and
+      # first-time contributors would be unable to build at all.
+      - name: 构建（不提供任何环境变量）
+        run: npm run build
+
+      - name: APK 解析器测试
+        run: npm run test:apk
+
+      - name: SigV4 签名测试
+        run: npm run test:sign
