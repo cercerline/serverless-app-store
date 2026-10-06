@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>codec probe</title></head>
+<body>
+<pre id="out">running…</pre>
+<script>
+(function () {
+  var types = [
+    "video/mp4",
+    "video/mp4;codecs=avc1",
+    "video/mp4;codecs=avc1.42E01E",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4;codecs=h264",
+    "video/webm",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=h264",
+    "video/x-matroska;codecs=avc1",
+    "audio/mp4",
+    "audio/webm;codecs=opus"
+  ];
+
+  var lines = [];
+  lines.push("MediaRecorder 支持情况：");
+  types.forEach(function (t) {
+    var ok = false;
+    try { ok = window.MediaRecorder && MediaRecorder.isTypeSupported(t); } catch (e) {}
+    lines.push((ok ? "  YES  " : "  no   ") + t);
+  });
+
+  lines.push("");
+  lines.push("canvas.captureStream: " + (typeof HTMLCanvasElement.prototype.captureStream === "function" ? "YES" : "no"));
+  lines.push("AudioContext: " + (typeof (window.AudioContext || window.webkitAudioContext) === "function" ? "YES" : "no"));
+  lines.push("createMediaStreamDestination: " +
+    (window.AudioContext && AudioContext.prototype.createMediaStreamDestination ? "YES" : "no"));
+  lines.push("OfflineAudioContext: " + (window.OfflineAudioContext ? "YES" : "no"));
+  lines.push("AudioEncoder (WebCodecs): " + (window.AudioEncoder ? "YES" : "no"));
+  lines.push("VideoEncoder (WebCodecs): " + (window.VideoEncoder ? "YES" : "no"));
+  lines.push("navigator.userAgent: " + navigator.userAgent);
+
+  document.getElementById("out").textContent = lines.join("\n");
+})();
+</script>
+</body>
+</html>

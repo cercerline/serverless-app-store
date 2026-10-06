@@ -16,6 +16,11 @@ next-env.d.ts
 # 需要的话从 .npmrc.example 复制一份。
 .npmrc
 
+# 宣传片配音：3.5MB 的 base64 音频，由 npm run video:voice 生成。
+# 生成物不进版本库，否则每次重录都会在历史里留一份。
+promo/bilibili/voiceover.js
+promo/bilibili/.tmp-voice/
+
 # 本地临时文件
 .DS_Store
 Thumbs.db

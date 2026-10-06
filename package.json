@@ -21,6 +21,8 @@
     "test:upsert": "node --no-warnings scripts/test-upsert.mts",
     "secret-scan": "node --no-warnings scripts/secret-scan.mts",
     "check:seeds": "node --no-warnings scripts/check-seed-apps.mts",
+    "check:recorder": "node --no-warnings scripts/check-recorder.mts",
+    "video:voice": "node --no-warnings promo/bilibili/make-voiceover.mts",
     "publish:seeds": "node --no-warnings --dns-result-order=ipv4first scripts/publish-seed-apps.mts",
     "inspect-apps": "node --no-warnings scripts/inspect-apps.mts",
     "check-schema": "node --no-warnings scripts/check-schema.mts",

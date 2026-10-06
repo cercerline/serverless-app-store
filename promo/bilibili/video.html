@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小凯奇 AI 应用商店 · B 站宣传片生成器</title>
+<style>
+  *{box-sizing:border-box}
+  :root{--bg:#070b14;--card:#101a2c;--line:rgba(255,255,255,.1);--text:#e8eefc;--dim:#8b9ab5;--accent:#22d3ee;--ok:#34d399}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 48px}
+  h1{font-size:20px;margin:0 0 6px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 20px}
+  .stage{position:relative;background:#000;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
+  canvas{display:block;width:100%;height:auto}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(7,11,20,.82);font-size:16px;color:var(--dim);text-align:center;padding:24px;line-height:1.9}
+  .overlay.hide{display:none}
+  .bar{height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;margin-bottom:18px}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#22d3ee,#34d399);transition:width .1s linear}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  button{border:0;border-radius:11px;padding:13px 22px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:filter .15s}
+  button:hover:not(:disabled){filter:brightness(1.08)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  #record{background:var(--accent);color:#06202a}
+  #preview{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:400}
+  .meta{margin-left:auto;color:var(--dim);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+  .card h2{font-size:14px;margin:0 0 8px;font-weight:600;color:var(--dim)}
+  .card p{margin:0;font-size:13px;color:var(--dim);line-height:1.85}
+  .card ol{margin:6px 0 0;padding-left:20px;font-size:13px;color:var(--dim);line-height:1.9}
+  code{background:rgba(255,255,255,.07);padding:2px 7px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .ok{color:var(--ok)}
+  .warn{color:#fbbf24}
+  .note{background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.2);border-radius:12px;padding:12px 14px;font-size:13px;color:#a5f3fc;line-height:1.8}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>B 站宣传片生成器</h1>
+  <p class="sub">1920×1080 · 30fps · 带配音 · 全程离线，录完直接上传 B 站</p>
+
+  <div class="stage">
+    <canvas id="stage" width="1920" height="1080"></canvas>
+    <div class="overlay" id="overlay">正在读取配音…</div>
+  </div>
+
+  <div class="bar"><i id="progress"></i></div>
+
+  <div class="row">
+    <button id="record" disabled>开始录制</button>
+    <button id="preview" disabled>先预览一遍</button>
+    <span class="meta" id="meta"></span>
+  </div>
+
+  <div class="card">
+    <h2>怎么用</h2>
+    <ol>
+      <li>点「先预览一遍」看效果（不录制，随时可重来）</li>
+      <li>满意后点「开始录制」，页面会自动播放并录制，<b>不要切换标签页</b></li>
+      <li>播放结束会自动下载一个 <code>.mp4</code> 文件，<b>直接上传 B 站即可</b></li>
+      <li>封面图：打开 <code>video.html?t=55&amp;clean=1</code> 然后截屏，得到干净的 1920×1080 画面</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>为什么用实时录制而不是直接导出</h2>
+    <p>
+      浏览器没有「渲染成视频文件」的接口，但可以一边渲染一边录。
+      好处是动画、中文字体、二维码全部由浏览器原生绘制，不需要安装任何图形库或转码工具。
+      用新版 Edge 或 Chrome 打开，录出来就是 H.264 + AAC 的 MP4；旧浏览器会自动退回 WebM。
+    </p>
+  </div>
+
+  <div class="note" id="hint">
+    提示：录制时会同时采集系统声音吗？不会——配音是通过 Web Audio 直接混入录制流的，
+    所以<b>不需要</b>任何录屏权限，也不会有环境噪音。
+  </div>
+</div>
+
+<script src="qr-encoder.js"></script>
+<script src="voiceover.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var W = 1920, H = 1080;
+
+  var VO = window.VOICEOVER;
+
+  /*
+   * voiceover.js 是生成物，不进版本库（3.5MB 的 base64，重新生成会撑大历史）。
+   * 缺文件时给出能照着做的提示，而不是让页面停在「正在读取配音…」上。
+   */
+  if (!VO || !VO.scenes || !VO.scenes.length) {
+    var box = document.getElementById("overlay");
+    box.innerHTML =
+      "<div style='text-align:left;max-width:520px'>" +
+      "<b style='color:#fbbf24;font-size:17px'>缺少配音文件 voiceover.js</b>" +
+      "<p style='margin:12px 0 8px'>这是生成物，不在仓库里。在项目根目录执行一次即可：</p>" +
+      "<code style='display:block;background:rgba(255,255,255,.08);padding:10px 14px;border-radius:8px;font-size:14px'>npm run video:voice</code>" +
+      "<p style='margin-top:12px;font-size:13px;opacity:.8'>它用 Windows 自带的中文语音合成生成 10 段旁白，不需要联网。</p>" +
+      "</div>";
+    return;
+  }
+
+  var SCENES = VO.scenes;
+  var TOTAL = VO.totalSeconds;
+
+  var overlay = document.getElementById("overlay");
+  var progressEl = document.getElementById("progress");
+  var metaEl = document.getElementById("meta");
+  var recordBtn = document.getElementById("record");
+  var previewBtn = document.getElementById("preview");
+
+  metaEl.textContent = SCENES.length + " 个分镜 · " + TOTAL.toFixed(1) + " 秒 · 音色 " + VO.voice;
+
+  /* ------------------------------------------------------------------ 视觉基础 */
+
+  var C = {
+    bg0: "#070b14", bg1: "#0d1526", bg2: "#10203a",
+    text: "#e8eefc", dim: "#8b9ab5", faint: "#4a5568",
+    accent: "#22d3ee", accent2: "#5eead4", brand: "#14b8a6",
+    danger: "#fb7185", ok: "#34d399", card: "#141d2f", line: "rgba(255,255,255,.10)"
+  };
+
+  var FONT = '"PingFang SC","Microsoft YaHei","Hiragino Sans GB","Segoe UI",system-ui,sans-serif';
+  function font(size, weight) { return (weight || 400) + " " + size + "px " + FONT; }
+
+  function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+  function easeOut(t) { return 1 - Math.pow(1 - clamp01(t), 3); }
+  function easeInOut(t) { t = clamp01(t); return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
+  function back(t) { t = clamp01(t); var c = 1.70158; return 1 + (c+1)*Math.pow(t-1,3) + c*Math.pow(t-1,2); }
+
+  /** 进度：在第 delay 秒后，用 dur 秒从 0 走到 1。 */
+  function at(t, delay, dur) { return clamp01((t - delay) / (dur || 0.6)); }
+
+  function bg() {
+    var g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, C.bg0); g.addColorStop(0.55, C.bg1); g.addColorStop(1, C.bg2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function grid(alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "rgba(125,211,252,0.055)";
+    ctx.lineWidth = 1;
+    for (var x = 0; x < W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (var y = 0; y < H; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function text(str, x, y, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.globalAlpha = opts.alpha === undefined ? 1 : clamp01(opts.alpha);
+    ctx.font = font(opts.size || 48, opts.weight || 400);
+    ctx.fillStyle = opts.color || C.text;
+    ctx.textAlign = opts.align || "left";
+    ctx.textBaseline = opts.baseline || "alphabetic";
+    if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.blur || 40; }
+    if (opts.letterSpacing !== undefined) ctx.letterSpacing = opts.letterSpacing + "px";
+    ctx.fillText(str, x, y);
+    ctx.restore();
+  }
+
+  function rounded(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function panel(x, y, w, h, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.globalAlpha = opts.alpha === undefined ? 1 : clamp01(opts.alpha);
+    rounded(x, y, w, h, opts.r === undefined ? 20 : opts.r);
+    ctx.fillStyle = opts.fill || "rgba(20,29,47,0.9)";
+    ctx.fill();
+    ctx.strokeStyle = opts.stroke || C.line;
+    ctx.lineWidth = opts.lw || 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* 站点的方块 logo，和网站导航栏一致 */
+  function logo(cx, cy, size, alpha) {
+    ctx.save();
+    ctx.globalAlpha = clamp01(alpha);
+    var s = size;
+    rounded(cx - s/2, cy - s/2, s, s, s * 0.26);
+    var g = ctx.createLinearGradient(cx - s/2, cy - s/2, cx + s/2, cy + s/2);
+    g.addColorStop(0, "rgba(34,211,238,0.22)");
+    g.addColorStop(1, "rgba(20,184,166,0.22)");
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = "rgba(34,211,238,0.45)"; ctx.lineWidth = 2; ctx.stroke();
+
+    // 一个简化的立方体轮廓
+    ctx.strokeStyle = C.accent; ctx.lineWidth = Math.max(2, s * 0.045);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    var k = s * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - k);
+    ctx.lineTo(cx + k * 0.92, cy - k * 0.5);
+    ctx.lineTo(cx + k * 0.92, cy + k * 0.5);
+    ctx.lineTo(cx, cy + k);
+    ctx.lineTo(cx - k * 0.92, cy + k * 0.5);
+    ctx.lineTo(cx - k * 0.92, cy - k * 0.5);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - k * 0.92, cy - k * 0.5);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx + k * 0.92, cy - k * 0.5);
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx, cy + k);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* --------------------------------------------------------------- 二维码 */
+
+  var QR_MODULES = null;
+  function qrModules() {
+    if (!QR_MODULES) {
+      try {
+        QR_MODULES = encodeQr("https://xiaokaiqi.website/upload", "M");
+      } catch (e) {
+        QR_MODULES = null;
+      }
+    }
+    return QR_MODULES;
+  }
+
+  /**
+   * 逐行揭示的二维码：从中心向外扫出，比直接贴一张图更有「加载」的感觉。
+   */
+  function drawQr(x, y, size, reveal) {
+    var qr = qrModules();
+    panel(x - 28, y - 28, size + 56, size + 56, { r: 24, fill: "#ffffff", stroke: "rgba(255,255,255,.9)" });
+    if (!qr) return;
+
+    var n = qr.size;
+    var cell = size / n;
+    var rows = Math.ceil(n * clamp01(reveal));
+
+    ctx.save();
+    ctx.fillStyle = "#0b1220";
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < n; c++) {
+        if (!qr.modules[r][c]) continue;
+        ctx.fillRect(Math.round(x + c * cell), Math.round(y + r * cell),
+                     Math.ceil(cell), Math.ceil(cell));
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------- 分镜绘制 */
+
+  var DRAW = {};
+
+  /* 1. 开头提问 */
+  DRAW.hook = function (t, d) {
+    bg(); grid(0.5);
+
+    var a1 = easeOut(at(t, 0.15, 0.7));
+    var a2 = easeOut(at(t, 1.5, 0.7));
+
+    ctx.save();
+    ctx.globalAlpha = a1;
+    ctx.translate(W/2, H/2 - 90 - (1 - a1) * 26);
+    text("你用 AI 做了一个 app", 0, 0, { size: 88, weight: 600, align: "center" });
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = a2;
+    var scale = 0.9 + back(at(t, 1.5, 0.7)) * 0.1;
+    ctx.translate(W/2, H/2 + 70);
+    ctx.scale(scale, scale);
+    text("然后呢？", 0, 0, { size: 148, weight: 700, align: "center", color: C.accent, glow: "rgba(34,211,238,.5)", blur: 60 });
+    ctx.restore();
+
+    // 光标闪烁，暗示「等你回答」
+    var blink = (Math.sin(t * 6) + 1) / 2;
+    ctx.save();
+    ctx.globalAlpha = a2 * 0.55 * blink;
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(W/2 - 250, H/2 + 130, 500, 4);
+    ctx.restore();
+  };
+
+  /* 2. 困在一台手机里 */
+  DRAW["pain-phone"] = function (t, d) {
+    bg(); grid(0.4);
+
+    var pw = 360, ph = 700, px = 240, py = (H - ph) / 2;
+
+    // 手机外框
+    panel(px, py, pw, ph, { r: 48, fill: "rgba(15,23,40,0.95)", stroke: "rgba(255,255,255,.16)", lw: 3 });
+    ctx.save();
+    rounded(px + 18, py + 18, pw - 36, ph - 36, 34);
+    ctx.fillStyle = "#080d18"; ctx.fill();
+    ctx.restore();
+
+    // 一个 app 图标在屏幕里弹来弹去
+    var iw = 132, ih = 132;
+    var tx = px + 40 + (pw - 80 - iw) * (0.5 + 0.45 * Math.sin(t * 2.1));
+    var ty = py + 90 + (ph - 200 - ih) * (0.5 + 0.42 * Math.sin(t * 3.3 + 1));
+    ctx.save();
+    rounded(tx, ty, iw, ih, 30);
+    var ig = ctx.createLinearGradient(tx, ty, tx + iw, ty + ih);
+    ig.addColorStop(0, "#164e63"); ig.addColorStop(1, "#0e7490");
+    ctx.fillStyle = ig; ctx.fill();
+    ctx.strokeStyle = "rgba(34,211,238,.4)"; ctx.lineWidth = 2; ctx.stroke();
+    text("app", tx + iw/2, ty + ih/2 + 14, { size: 40, weight: 600, align: "center", color: "#cffafe" });
+    ctx.restore();
+
+    // 撞墙的涟漪
+    var edge = Math.min(Math.abs(tx - (px+40)), Math.abs(tx + iw - (px + pw - 40)));
+    if (edge < 14) {
+      ctx.save();
+      ctx.globalAlpha = (1 - edge/14) * 0.5;
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(tx + iw/2, ty + ih/2, iw * (0.8 + edge/14), 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // 右侧文案
+    var x = 760;
+    var lines = [
+      { s: "只能装在自己手机上", c: C.text, sz: 60, w: 600, delay: 0.3 },
+      { s: "想发给朋友？", c: C.dim, sz: 46, w: 400, delay: 1.6 },
+      { s: "微信传不了安装包", c: C.dim, sz: 46, w: 400, delay: 2.6 }
+    ];
+    lines.forEach(function (l) {
+      var a = easeOut(at(t, l.delay, 0.6));
+      var dx = (1 - a) * 34;
+      text(l.s, x + dx, 380 + lines.indexOf(l) * 96, { size: l.sz, weight: l.w, color: l.c, alpha: a });
+    });
+
+    // 发送失败的提示
+    var fa = easeOut(at(t, 3.9, 0.6));
+    if (fa > 0) {
+      ctx.save();
+      ctx.globalAlpha = fa;
+      var bx = x, by = 660, bw = 520, bh = 96;
+      rounded(bx, by, bw, bh, 20);
+      ctx.fillStyle = "rgba(251,113,133,.12)"; ctx.fill();
+      ctx.strokeStyle = "rgba(251,113,133,.4)"; ctx.lineWidth = 2; ctx.stroke();
+      // 叉号
+      ctx.strokeStyle = C.danger; ctx.lineWidth = 6; ctx.lineCap = "round";
+      var cx0 = bx + 52, cy0 = by + bh/2, k = 17;
+      ctx.beginPath();
+      ctx.moveTo(cx0-k, cy0-k); ctx.lineTo(cx0+k, cy0+k);
+      ctx.moveTo(cx0+k, cy0-k); ctx.lineTo(cx0-k, cy0+k);
+      ctx.stroke();
+      text("发送失败", bx + 104, by + bh/2 + 15, { size: 40, weight: 600, color: "#fda4af" });
+      ctx.restore();
+    }
+  };
+
+  /* 3. 上架的三道关卡 */
+  DRAW["pain-store"] = function (t, d) {
+    bg(); grid(0.4);
+
+    text("想上架应用商店？", W/2, 200, { size: 66, weight: 600, align: "center", alpha: easeOut(at(t, 0.1, 0.6)) });
+
+    var gates = ["开发者账号", "提交审核", "等待上架"];
+    var delays = [1.4, 2.8, 4.2];
+
+    gates.forEach(function (name, i) {
+      var a = easeOut(at(t, 1.0 + i * 0.25, 0.5));
+      var x = 380, y = 330 + i * 150, w = 1160, h = 112;
+      panel(x, y, w, h, { r: 18, alpha: a, fill: "rgba(20,29,47,0.85)" });
+      text(name, x + 56, y + h/2 + 16, { size: 46, weight: 500, alpha: a });
+
+      // 红叉在对应的时刻砸下来
+      var xa = easeOut(at(t, delays[i], 0.35));
+      if (xa > 0) {
+        ctx.save();
+        ctx.globalAlpha = xa;
+        ctx.translate(x + w - 110, y + h/2);
+        ctx.scale(0.6 + xa * 0.4, 0.6 + xa * 0.4);
+        ctx.strokeStyle = C.danger; ctx.lineWidth = 11; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-26, -26); ctx.lineTo(26, 26);
+        ctx.moveTo(26, -26); ctx.lineTo(-26, 26);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
+    var fa = easeOut(at(t, 5.6, 0.7));
+    if (fa > 0) {
+      text("个人开发者，越来越难", W/2, 900, { size: 52, weight: 600, align: "center", color: C.dim, alpha: fa });
+    }
+  };
+
+  /* 4. 转折：站点登场 */
+  DRAW.reveal = function (t, d) {
+    bg();
+
+    // 光晕
+    var pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
+    var rg = ctx.createRadialGradient(W/2, H/2 - 40, 60, W/2, H/2 - 40, 760);
+    rg.addColorStop(0, "rgba(34,211,238," + (0.16 + pulse * 0.08) + ")");
+    rg.addColorStop(1, "rgba(34,211,238,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+
+    var la = back(at(t, 0.1, 0.75));
+    ctx.save();
+    ctx.translate(W/2, H/2 - 150);
+    ctx.scale(0.5 + la * 0.5, 0.5 + la * 0.5);
+    ctx.globalAlpha = clamp01(la);
+    logo(0, 0, 200, 1);
+    ctx.restore();
+
+    var a1 = easeOut(at(t, 0.7, 0.7));
+    text("小凯奇 AI 应用商店", W/2, H/2 + 90, { size: 96, weight: 700, align: "center", alpha: a1 });
+
+    var a2 = easeOut(at(t, 1.7, 0.7));
+    text("xiaokaiqi.website", W/2, H/2 + 190, { size: 48, align: "center", color: C.accent, alpha: a2, letterSpacing: 1 });
+
+    var a3 = easeOut(at(t, 2.6, 0.7));
+    text("专门收 AI 做的应用", W/2, H/2 + 290, { size: 44, align: "center", color: C.dim, alpha: a3 });
+  };
+
+  /* 5. 上传与自动解析 */
+  DRAW.upload = function (t, d) {
+    bg(); grid(0.35);
+
+    text("上传 APK，自动读出应用信息", 120, 150, { size: 58, weight: 600, alpha: easeOut(at(t, 0.1, 0.6)) });
+
+    // 左侧上传框
+    var bx = 120, by = 260, bw = 700, bh = 640;
+    var pa = easeOut(at(t, 0.2, 0.6));
+    ctx.save();
+    ctx.globalAlpha = pa;
+    rounded(bx, by, bw, bh, 26);
+    ctx.fillStyle = "rgba(20,29,47,0.7)"; ctx.fill();
+    ctx.setLineDash([16, 12]);
+    ctx.lineDashOffset = -t * 40;
+    ctx.strokeStyle = "rgba(34,211,238,.45)"; ctx.lineWidth = 3; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    text("把文件拖进来", bx + bw/2, by + bh/2 + 110, { size: 38, align: "center", color: C.faint, alpha: pa });
+
+    // 飞入的文件
+    var fly = easeInOut(at(t, 0.9, 1.5));
+    if (fly < 1) {
+      var fx = W + 100 - (W + 100 - (bx + bw/2 - 70)) * fly;
+      var fy = 100 + ((by + bh/2 - 90) - 100) * fly;
+      ctx.save();
+      ctx.globalAlpha = 1 - fly * 0.25;
+      ctx.translate(fx, fy);
+      ctx.rotate((1 - fly) * 0.5);
+      rounded(0, 0, 140, 180, 16);
+      ctx.fillStyle = "#164e63"; ctx.fill();
+      ctx.strokeStyle = "rgba(34,211,238,.5)"; ctx.lineWidth = 2; ctx.stroke();
+      text("APK", 70, 108, { size: 38, weight: 700, align: "center", color: "#cffafe" });
+      ctx.restore();
+    }
+
+    // 上传进度
+    var up = at(t, 2.5, 1.4);
+    if (up > 0 && up < 1) {
+      ctx.save();
+      rounded(bx + 90, by + bh - 130, bw - 180, 14, 7);
+      ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fill();
+      rounded(bx + 90, by + bh - 130, (bw - 180) * up, 14, 7);
+      ctx.fillStyle = C.accent; ctx.fill();
+      ctx.restore();
+    } else if (up >= 1) {
+      text("上传完成", bx + bw/2, by + bh - 108, { size: 32, align: "center", color: C.ok });
+    }
+
+    // 右侧逐条出现的解析结果
+    var fields = [
+      { k: "应用名称", v: "倒计时", delay: 3.9 },
+      { k: "版本", v: "v1.0.0", delay: 4.9 },
+      { k: "权限", v: "无需联网", delay: 5.9 },
+      { k: "图标", v: "已自动提取", delay: 6.9 }
+    ];
+    var rx = 900, ry = 300;
+    fields.forEach(function (f, i) {
+      var a = easeOut(at(t, f.delay, 0.5));
+      if (a <= 0) return;
+      var y = ry + i * 128;
+      var dx = (1 - a) * 50;
+      ctx.save();
+      ctx.globalAlpha = a;
+      panel(rx + dx, y, 880, 104, { r: 16, fill: "rgba(20,29,47,0.95)" });
+      text(f.k, rx + dx + 40, y + 64, { size: 34, color: C.dim });
+      text(f.v, rx + dx + 840, y + 64, { size: 40, weight: 600, align: "right", color: C.accent2 });
+      // 对勾
+      ctx.strokeStyle = C.ok; ctx.lineWidth = 5; ctx.lineCap = "round";
+      var cx0 = rx + dx + 820 - 190, cy0 = y + 52;
+      ctx.beginPath();
+      ctx.moveTo(cx0 - 13, cy0); ctx.lineTo(cx0 - 3, cy0 + 11); ctx.lineTo(cx0 + 15, cy0 - 12);
+      ctx.stroke();
+      ctx.restore();
+    });
+  };
+
+  /* 6. 网页应用点开就用 */
+  DRAW.webapp = function (t, d) {
+    bg(); grid(0.35);
+
+    text("网页应用，点开就能用", 120, 150, { size: 58, weight: 600, alpha: easeOut(at(t, 0.1, 0.6)) });
+
+    // 浏览器窗口
+    var a = easeOut(at(t, 0.3, 0.7));
+    var wx = 140, wy = 280, ww = 1180, wh = 660;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(0, (1 - a) * 40);
+    panel(wx, wy, ww, wh, { r: 20, fill: "rgba(15,23,40,0.97)" });
+
+    // 标题栏
+    ctx.save();
+    rounded(wx, wy, ww, 62, 20); ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,.05)"; ctx.fillRect(wx, wy, ww, 62);
+    ctx.restore();
+    ["#fb7185", "#fbbf24", "#34d399"].forEach(function (col, i) {
+      ctx.beginPath(); ctx.arc(wx + 38 + i * 32, wy + 31, 9, 0, Math.PI*2);
+      ctx.fillStyle = col; ctx.fill();
+    });
+    rounded(wx + 170, wy + 16, 620, 30, 15);
+    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fill();
+    text("xiaokaiqi.website/app/pomodoro", wx + 190, wy + 38, { size: 19, color: C.faint });
+
+    // 窗口里真的跑一个番茄钟
+    var cx = wx + ww/2, cy = wy + 62 + (wh - 62)/2;
+    var r = 170;
+    ctx.save();
+    ctx.lineWidth = 18; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+    var prog = 0.28 + 0.30 * Math.sin(t * 0.9);
+    ctx.strokeStyle = C.accent;
+    ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*prog); ctx.stroke();
+    ctx.restore();
+    text("18:42", cx, cy + 26, { size: 78, weight: 700, align: "center" });
+    text("专注中", cx, cy + 92, { size: 30, align: "center", color: C.dim });
+    ctx.restore();
+
+    // 旁边的手机
+    var pa = easeOut(at(t, 1.8, 0.7));
+    ctx.save();
+    ctx.globalAlpha = pa;
+    var px = 1420, py = 300, pw = 340, ph = 620;
+    ctx.translate(0, (1 - pa) * 50);
+    panel(px, py, pw, ph, { r: 44, fill: "rgba(15,23,40,0.97)", stroke: "rgba(255,255,255,.16)", lw: 3 });
+    rounded(px + 16, py + 16, pw - 32, ph - 32, 32);
+    ctx.fillStyle = "#080d18"; ctx.fill();
+    text("同一套界面", px + pw/2, py + 200, { size: 32, align: "center", color: C.dim });
+    text("手机电脑都行", px + pw/2, py + 260, { size: 32, align: "center", color: C.dim });
+    // 小图标
+    rounded(px + pw/2 - 50, py + 340, 100, 100, 24);
+    ctx.fillStyle = "rgba(34,211,238,.15)"; ctx.fill();
+    ctx.strokeStyle = "rgba(34,211,238,.4)"; ctx.lineWidth = 2; ctx.stroke();
+    text("不用装", px + pw/2, py + 405, { size: 24, align: "center", color: C.accent2 });
+    ctx.restore();
+  };
+
+  /* 7. 三个对勾 */
+  DRAW.nocost = function (t, d) {
+    bg(); grid(0.35);
+
+    text("传完就有下载页", 120, 160, { size: 60, weight: 600, alpha: easeOut(at(t, 0.1, 0.6)) });
+
+    var items = ["不用开发者账号", "不用等审核", "自动生成分享图"];
+    items.forEach(function (label, i) {
+      var a = easeOut(at(t, 0.5 + i * 0.75, 0.55));
+      if (a <= 0) return;
+      var y = 330 + i * 170;
+      var dx = (1 - a) * -60;
+
+      ctx.save();
+      ctx.globalAlpha = a;
+      // 圆圈 + 对勾
+      ctx.translate(230 + dx, y + 40);
+      ctx.beginPath(); ctx.arc(0, 0, 46, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(52,211,153,.14)"; ctx.fill();
+      ctx.strokeStyle = "rgba(52,211,153,.5)"; ctx.lineWidth = 3; ctx.stroke();
+      ctx.strokeStyle = C.ok; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(-19, 1); ctx.lineTo(-6, 15); ctx.lineTo(21, -15);
+      ctx.stroke();
+      ctx.restore();
+
+      text(label, 320 + dx, y + 60, { size: 58, weight: 500, alpha: a });
+    });
+
+    // 分享卡片缩略图
+    var ca = easeOut(at(t, 3.0, 0.9));
+    if (ca > 0) {
+      ctx.save();
+      ctx.globalAlpha = ca;
+      var cx0 = 1180, cy0 = 330, cw = 600, ch = 320;
+      ctx.translate(0, (1 - ca) * 40);
+      panel(cx0, cy0, cw, ch, { r: 22, fill: "rgba(16,32,58,0.95)", stroke: "rgba(34,211,238,.3)" });
+      logo(cx0 + 70, cy0 + 70, 66, 1);
+      text("小凯奇 AI 应用商店", cx0 + 120, cy0 + 84, { size: 26, color: "#7dd3fc" });
+      text("倒计时", cx0 + 50, cy0 + 200, { size: 62, weight: 700 });
+      text("给考研党用的倒计时", cx0 + 50, cy0 + 258, { size: 30, color: C.dim });
+      rounded(cx0 + cw - 190, cy0 + 180, 150, 54, 27);
+      ctx.fillStyle = C.accent; ctx.fill();
+      text("免费下载", cx0 + cw - 115, cy0 + 216, { size: 24, weight: 700, align: "center", color: "#06202a" });
+      ctx.restore();
+    }
+  };
+
+  /* 8. 应用墙 */
+  DRAW.catalogue = function (t, d) {
+    bg(); grid(0.3);
+
+    text("站上已经有 10 个应用", 120, 150, { size: 58, weight: 600, alpha: easeOut(at(t, 0.1, 0.6)) });
+    text("全部免费 · 全部离线可用", 120, 215, { size: 34, color: C.dim, alpha: easeOut(at(t, 0.6, 0.6)) });
+
+    var apps = [
+      ["倒计时", "学习", "倒"], ["番茄钟", "效率", "番"], ["简易记账", "生活", "简"],
+      ["课程表", "学习", "课"], ["随机点名", "教学", "随"], ["单位换算", "工具", "单"],
+      ["密码生成器", "工具", "密"], ["图片压缩", "工具", "图"], ["考研默写", "工具", "考"],
+      ["农学考研", "工具", "农"]
+    ];
+
+    var cols = 5, cw = 320, chh = 190, gapx = 24, gapy = 24;
+    var totalW = cols * cw + (cols - 1) * gapx;
+    var startX = (W - totalW) / 2, startY = 320;
+
+    apps.forEach(function (app, i) {
+      var col = i % cols, row = Math.floor(i / cols);
+      var delay = 0.7 + i * 0.28;
+      var a = back(at(t, delay, 0.6));
+      if (a <= 0) return;
+
+      var x = startX + col * (cw + gapx);
+      var y = startY + row * (chh + gapy);
+
+      ctx.save();
+      ctx.globalAlpha = clamp01(a);
+      ctx.translate(x + cw/2, y + chh/2);
+      ctx.scale(0.86 + a * 0.14, 0.86 + a * 0.14);
+      ctx.translate(-(x + cw/2), -(y + chh/2));
+
+      panel(x, y, cw, chh, { r: 18, fill: "rgba(20,29,47,0.95)" });
+
+      rounded(x + 24, y + 30, 76, 76, 20);
+      var g = ctx.createLinearGradient(x+24, y+30, x+100, y+106);
+      g.addColorStop(0, "#164e63"); g.addColorStop(1, "#0e7490");
+      ctx.fillStyle = g; ctx.fill();
+      text(app[2], x + 62, y + 82, { size: 38, weight: 700, align: "center", color: "#cffafe" });
+
+      text(app[0], x + 120, y + 78, { size: 32, weight: 600 });
+      text(app[1], x + 24, y + 152, { size: 22, color: C.dim });
+      text("免费", x + cw - 24, y + 152, { size: 22, align: "right", color: C.ok });
+
+      ctx.restore();
+    });
+  };
+
+  /* 9. 行动号召 + 二维码 */
+  DRAW.cta = function (t, d) {
+    bg();
+    var pulse = 0.5 + 0.5 * Math.sin(t * 2);
+    var rg = ctx.createRadialGradient(W/2, H/2, 80, W/2, H/2, 900);
+    rg.addColorStop(0, "rgba(34,211,238," + (0.13 + pulse * 0.06) + ")");
+    rg.addColorStop(1, "rgba(34,211,238,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+
+    var a = easeOut(at(t, 0.15, 0.7));
+    text("扫码打开", 400, 400, { size: 44, color: C.dim, alpha: a, align: "center" });
+    text("xiaokaiqi.website", 400, 510, { size: 70, weight: 700, align: "center", alpha: easeOut(at(t, 0.45, 0.7)) });
+    text("免费 · 无需注册就能下载", 400, 600, { size: 34, color: C.accent2, align: "center", alpha: easeOut(at(t, 1.0, 0.7)) });
+
+    var qa = easeOut(at(t, 0.9, 1.2));
+    if (qa > 0) {
+      ctx.save();
+      ctx.globalAlpha = qa;
+      ctx.translate(0, (1 - qa) * 30);
+      drawQr(1420, 380, 320, at(t, 1.2, 1.1));
+      ctx.restore();
+    }
+  };
+
+  /* 10. 收尾 */
+  DRAW.outro = function (t, d) {
+    bg();
+    var pulse = 0.5 + 0.5 * Math.sin(t * 1.4);
+    var rg = ctx.createRadialGradient(W/2, H/2, 60, W/2, H/2, 820);
+    rg.addColorStop(0, "rgba(34,211,238," + (0.12 + pulse * 0.07) + ")");
+    rg.addColorStop(1, "rgba(34,211,238,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+
+    logo(W/2, H/2 - 190, 150, easeOut(at(t, 0.1, 0.6)));
+
+    text("小凯奇 AI 应用商店", W/2, H/2 + 20, { size: 86, weight: 700, align: "center", alpha: easeOut(at(t, 0.3, 0.7)) });
+    text("把你用 AI 做的 app 传上来", W/2, H/2 + 120, { size: 48, color: C.dim, align: "center", alpha: easeOut(at(t, 0.8, 0.7)) });
+    text("xiaokaiqi.website", W/2, H/2 + 250, { size: 64, weight: 600, align: "center", color: C.accent, alpha: easeOut(at(t, 1.3, 0.7)), glow: "rgba(34,211,238,.4)", blur: 40 });
+
+    var fa = easeOut(at(t, 2.2, 0.8));
+    if (fa > 0) {
+      ctx.save();
+      ctx.globalAlpha = fa * 0.75;
+      ctx.fillStyle = C.faint;
+      ctx.fillRect(W/2 - 260, H/2 + 310, 520, 2);
+      ctx.restore();
+      text("代码已开源 · GitHub 搜 serverless-app-store", W/2, H/2 + 370, { size: 30, align: "center", color: C.faint, alpha: fa });
+    }
+  };
+
+  /* --------------------------------------------------------------- 时间轴 */
+
+  /** 找到时刻 t 落在哪个分镜，并给出该分镜内的本地时间。 */
+  function sceneAt(t) {
+    for (var i = SCENES.length - 1; i >= 0; i--) {
+      if (t >= SCENES[i].start) {
+        return { scene: SCENES[i], local: t - SCENES[i].start, index: i };
+      }
+    }
+    return { scene: SCENES[0], local: t, index: 0 };
+  }
+
+  function renderFrame(t) {
+    var hit = sceneAt(t);
+    var draw = DRAW[hit.scene.id];
+    if (draw) {
+      draw(hit.local, hit.scene.seconds);
+    } else {
+      bg();
+      text(hit.scene.text, W/2, H/2, { size: 56, align: "center" });
+    }
+
+    // 左下角常驻站名，从第二个分镜起出现
+    if (t > SCENES[1].start - 0.4) {
+      var a = easeOut(at(t, SCENES[1].start - 0.4, 0.6)) * 0.85;
+      ctx.save();
+      ctx.globalAlpha = a;
+      logo(96, H - 62, 44, 1);
+      text("小凯奇 AI 应用商店", 130, H - 52, { size: 26, color: C.dim });
+      ctx.restore();
+    }
+
+    // 右下角进度条
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    var barW = W - 240, barX = 120, barY = H - 26;
+    rounded(barX, barY, barW, 5, 3);
+    ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill();
+    rounded(barX, barY, barW * clamp01(t / TOTAL), 5, 3);
+    ctx.fillStyle = C.accent; ctx.fill();
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------------ 音频 */
+
+  var audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx({ sampleRate: 48000 });
+    }
+    return audioCtx;
+  }
+
+  var decoded = {};
+  function decodeScene(scene) {
+    if (decoded[scene.id]) return Promise.resolve(decoded[scene.id]);
+    var base64 = scene.audio.split(",")[1];
+    var bin = atob(base64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return audioCtx.decodeAudioData(bytes.buffer).then(function (buf) {
+      decoded[scene.id] = buf;
+      return buf;
+    });
+  }
+
+  /* --------------------------------------------------------------- 主流程 */
+
+  var recording = false;
+  var recorder = null;
+  var chunks = [];
+
+  function setProgress(p) { progressEl.style.width = (clamp01(p) * 100).toFixed(2) + "%"; }
+
+  /**
+   * 播放整条时间轴。
+   *
+   * 用 audioCtx.currentTime 作为唯一时钟：音频排程到绝对时刻，画面每帧按同一
+   * 时钟取时间。若改用 requestAnimationFrame 的累计时长，几十秒后画面会比
+   * 配音漂移出可见的偏差。
+   */
+  function play(opts) {
+    return new Promise(function (resolve) {
+      var ctxA = ensureAudio();
+      var dest = ctxA.createMediaStreamDestination();
+
+      return Promise.all(SCENES.map(decodeScene)).then(function (buffers) {
+        var stream = canvas.captureStream(30);
+        if (opts.record) {
+          dest.stream.getAudioTracks().forEach(function (track) { stream.addTrack(track); });
+        }
+
+        /*
+         * 优先直接录 MP4。
+         *
+         * 新版 Chromium 内核的 MediaRecorder 已支持 H.264 + AAC 的 MP4，
+         * 而这正是 B 站原生接受的格式——能直接录 MP4 就不需要再装 ffmpeg 转码，
+         * 少一个步骤、少一次画质损失。不支持时才退回 WebM。
+         */
+        var CANDIDATES = [
+          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+          "video/mp4;codecs=avc1",
+          "video/mp4",
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm"
+        ];
+        var mime = "video/webm";
+        for (var mi = 0; mi < CANDIDATES.length; mi++) {
+          if (MediaRecorder.isTypeSupported(CANDIDATES[mi])) { mime = CANDIDATES[mi]; break; }
+        }
+        var isMp4 = mime.indexOf("mp4") !== -1;
+
+        if (opts.record) {
+          recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+          chunks = [];
+          recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+          recorder.onstop = function () {
+            var blob = new Blob(chunks, { type: mime });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "xiaokaiqi-bilibili." + (isMp4 ? "mp4" : "webm");
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+            resolve({ blob: blob, mime: mime, isMp4: isMp4 });
+          };
+          recorder.start(1000);
+          console.log("录制格式：" + mime + "（" + (isMp4 ? "可直接上传 B 站" : "建议转成 MP4 再上传") + "）");
+        }
+
+        var t0 = ctxA.currentTime + 0.35;
+        var sources = [];
+
+        SCENES.forEach(function (scene, i) {
+          var src = ctxA.createBufferSource();
+          src.buffer = buffers[i];
+          src.connect(ctxA.destination);       // 扬声器
+          if (opts.record) src.connect(dest);  // 录制流
+          src.start(t0 + scene.start);
+          sources.push(src);
+        });
+
+        function frame() {
+          var t = ctxA.currentTime - t0;
+          if (t < 0) { renderFrame(0); requestAnimationFrame(frame); return; }
+          if (t >= TOTAL) {
+            renderFrame(TOTAL);
+            setProgress(1);
+            sources.forEach(function (s) { try { s.stop(); } catch (e) {} });
+            if (opts.record && recorder && recorder.state !== "inactive") {
+              // 收尾：多录半秒，避免最后一帧被切掉
+              setTimeout(function () { recorder.stop(); }, 500);
+            } else {
+              resolve({ blob: null });
+            }
+            return;
+          }
+          renderFrame(t);
+          setProgress(t / TOTAL);
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      });
+    });
+  }
+
+  function setBusy(busy) {
+    recordBtn.disabled = busy;
+    previewBtn.disabled = busy;
+  }
+
+  previewBtn.onclick = function () {
+    setBusy(true);
+    overlay.className = "overlay";
+    overlay.textContent = "预览播放中…";
+    play({ record: false }).then(function () {
+      overlay.className = "overlay hide";
+      setBusy(false);
+      setProgress(0);
+      renderFrame(0);
+    });
+  };
+
+  recordBtn.onclick = function () {
+    setBusy(true);
+    overlay.className = "overlay";
+    overlay.innerHTML = "录制中…请不要切换标签页<br><span style='font-size:13px'>结束后会自动下载视频文件</span>";
+    play({ record: true }).then(function (result) {
+      overlay.className = "overlay";
+      overlay.innerHTML = "✓ 录制完成，文件已开始下载<br><span style='font-size:13px'>如果没看到下载，请检查浏览器的下载拦截提示</span>";
+      setBusy(false);
+      setProgress(1);
+      console.log("录制完成：", result && result.blob ? (result.blob.size / 1024 / 1024).toFixed(1) + " MB" : "无数据", result && result.mime);
+    });
+  };
+
+  /* 就绪 */
+  renderFrame(0);
+  setProgress(0);
+  overlay.className = "overlay hide";
+  recordBtn.disabled = false;
+  previewBtn.disabled = false;
+
+  /*
+   * ?t=18 渲染指定时刻的静帧，不播放、不录制。
+   *
+   * B 站投稿需要封面图，这个参数让你不用先录一遍再截屏——直接打开
+   * video.html?t=18 然后截浏览器窗口即可。
+   * ?t=list 会按每个分镜的中点依次铺开，用来一次性检查所有画面。
+   */
+  var params = new URLSearchParams(location.search);
+  var at2 = params.get("t");
+
+  /*
+   * ?clean=1 隐藏页面上的一切，只留画面本身。
+   *
+   * 配合 ?t= 用来出封面图：打开 video.html?t=55&clean=1 然后截屏，得到的就是
+   * 一张干净的 1920×1080 画面，没有按钮和说明文字。
+   */
+  if (params.get("clean") === "1") {
+    document.querySelector("h1").style.display = "none";
+    document.querySelector(".sub").style.display = "none";
+    document.querySelector(".bar").style.display = "none";
+    document.querySelector(".row").style.display = "none";
+    var cards = document.querySelectorAll(".card, .note");
+    for (var ci = 0; ci < cards.length; ci++) cards[ci].style.display = "none";
+    document.body.style.background = "#000";
+    document.querySelector(".wrap").style.maxWidth = "none";
+    document.querySelector(".wrap").style.padding = "0";
+    document.querySelector(".stage").style.borderRadius = "0";
+    document.querySelector(".stage").style.border = "0";
+    document.querySelector(".stage").style.margin = "0";
+  }
+
+  if (at2 === "list") {
+    overlay.className = "overlay";
+    overlay.innerHTML = "分镜预览模式：按 <b>空格</b> 切换下一个分镜<br><span style='font-size:13px'>当前：<span id='which'></span></span>";
+    var idx = 0;
+    var show = function () {
+      var scene = SCENES[idx];
+      renderFrame(scene.start + scene.seconds * 0.62);
+      document.getElementById("which").textContent =
+        (idx + 1) + "/" + SCENES.length + "  " + scene.id + "  " + scene.text;
+    };
+    show();
+    document.addEventListener("keydown", function (e) {
+      if (e.key === " ") { e.preventDefault(); idx = (idx + 1) % SCENES.length; show(); }
+    });
+    recordBtn.disabled = true;
+    previewBtn.disabled = true;
+  } else if (at2 !== null && at2 !== "") {
+    var t2 = parseFloat(at2);
+    if (isFinite(t2)) {
+      renderFrame(Math.max(0, Math.min(TOTAL, t2)));
+      setProgress(t2 / TOTAL);
+      overlay.className = "overlay hide";
+      recordBtn.disabled = true;
+      previewBtn.disabled = true;
+      document.title = "静帧 t=" + t2.toFixed(1) + "s";
+    }
+  }
+})();
+</script>
+</body>
+</html>

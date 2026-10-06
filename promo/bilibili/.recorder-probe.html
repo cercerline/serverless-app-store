@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>recorder probe</title></head>
+<body>
+<canvas id="c" width="640" height="360"></canvas>
+<pre id="out">running…</pre>
+<script>
+/*
+ * 验证录制管线：canvas 画面 + Web Audio 混音 → MediaRecorder → 带音轨的 MP4。
+ *
+ * 结果 POST 回本地的一次性服务器。页面写不了文件，而 --dump-dom 在异步录制
+ * 结束前就返回了，所以必须把结论送出去而不是留在 DOM 里。
+ */
+(async function () {
+  var params = new URLSearchParams(location.search);
+  var PORT = params.get("port");
+  var log = [];
+  var result = {};
+
+  function say(s) { log.push(s); document.getElementById("out").textContent = log.join("\n"); }
+
+  function report() {
+    if (!PORT) return;
+    // 先把结论摆到 DOM 里，回传失败时至少还能用 --dump-dom 看到
+    document.getElementById("out").textContent =
+      log.join("\n") + "\n\nVERDICT " + (result.verdict || "UNKNOWN");
+    fetch("http://127.0.0.1:" + PORT + "/result", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(result),
+    }).catch(function () {});
+  }
+
+  try {
+    var canvas = document.getElementById("c");
+    var ctx = canvas.getContext("2d");
+
+    // 画面持续变化，否则编码器可能判定无内容而不产出数据
+    var raf = 0, t0 = performance.now();
+    (function draw() {
+      var t = (performance.now() - t0) / 1000;
+      ctx.fillStyle = "#0b1220"; ctx.fillRect(0, 0, 640, 360);
+      ctx.fillStyle = "#22d3ee";
+      ctx.fillRect(Math.round(160 + Math.sin(t * 3) * 120), 140, 90, 90);
+      ctx.fillStyle = "#fff";
+      ctx.font = "28px sans-serif";
+      ctx.fillText("t=" + t.toFixed(1) + "s", 30, 60);
+      raf = requestAnimationFrame(draw);
+    })();
+
+    // 用振荡器代替配音，重点验证音轨能否混入录制流
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    var actx = new Ctx({ sampleRate: 48000 });
+    var dest = actx.createMediaStreamDestination();
+    var osc = actx.createOscillator();
+    var gain = actx.createGain();
+    osc.frequency.value = 440;
+    gain.gain.value = 0.08;
+    osc.connect(gain);
+    gain.connect(dest);           // 只进录制流，不吵到扬声器
+    osc.start();
+
+    var stream = canvas.captureStream(30);
+    var audioTracks = dest.stream.getAudioTracks();
+    result.sampleRate = actx.sampleRate;
+    result.audioTracks = audioTracks.length;
+    say("AudioContext 采样率: " + actx.sampleRate);
+    say("录音轨数量: " + audioTracks.length);
+    audioTracks.forEach(function (tr) { stream.addTrack(tr); });
+
+    var CANDIDATES = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+      "video/webm;codecs=vp9,opus",
+      "video/webm"
+    ];
+    var mime = null;
+    for (var i = 0; i < CANDIDATES.length; i++) {
+      if (MediaRecorder.isTypeSupported(CANDIDATES[i])) { mime = CANDIDATES[i]; break; }
+    }
+    result.mime = mime;
+    say("选用格式: " + mime);
+
+    var chunks = [];
+    var rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+
+    var done = new Promise(function (resolve) { rec.onstop = resolve; });
+    rec.start(500);
+    say("录制中 4 秒…");
+
+    await new Promise(function (r) { setTimeout(r, 4000); });
+    rec.stop();
+    await done;
+    cancelAnimationFrame(raf);
+    try { osc.stop(); } catch (e) {}
+
+    var blob = new Blob(chunks, { type: mime });
+    result.chunks = chunks.length;
+    result.sizeKB = Math.round(blob.size / 1024);
+    result.kbps = Math.round(blob.size * 8 / 4 / 1000);
+
+    say("");
+    say("=== 结果 ===");
+    say("块数: " + result.chunks);
+    say("总大小: " + result.sizeKB + " KB");
+    say("MIME: " + blob.type);
+    say("时长 4 秒，码率约 " + result.kbps + " kbps");
+
+    /*
+     * 把录出来的字节重新读一遍，确认容器里真的有音轨。
+     * 只看 blob.size 会被「只有画面没有声音」骗过去——那正是最容易出的问题。
+     */
+    var buf = new Uint8Array(await blob.arrayBuffer());
+    var text = "";
+    for (var k = 0; k < buf.length; k++) text += String.fromCharCode(buf[k]);
+
+    var hasMp4Audio = text.indexOf("mp4a") !== -1;
+    var hasWebmAudio = /Opus|opus/.test(text);
+    var hasVideo = /avc1|avcC|V_VP8|V_VP9/.test(text);
+
+    result.hasAudio = hasMp4Audio || hasWebmAudio;
+    result.hasVideo = hasVideo;
+
+    say("");
+    say("容器内音轨标记: " + (result.hasAudio ? "有 ✓" : "无 ✗") +
+        "  (mp4a=" + hasMp4Audio + " Opus=" + hasWebmAudio + ")");
+    say("容器内视频轨标记: " + (hasVideo ? "有 ✓" : "无 ✗"));
+
+    result.verdict = (blob.size > 20000 && hasVideo && result.hasAudio) ? "PASS" : "FAIL";
+  } catch (e) {
+    result.verdict = "FAIL";
+    result.exception = String(e && e.message ? e.message : e);
+    say("EXCEPTION " + result.exception);
+  }
+
+  report();
+})();
+</script>
+</body>
+</html>
