@@ -158,10 +158,15 @@ export default async function AppDetailPage({ params }: DetailProps) {
                     打开 Web 应用
                   </a>
                   <a
-                    href={`/view/${app.slug}`}
-                    download
+                    href={`/download/${app.slug}`}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-brand-500/40 hover:text-white"
                   >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17.4l-4.7-4.7 1.4-1.4L12 13.6V3h0ZM5 19h14v2H5v-2Z"
+                      />
+                    </svg>
                     下载源文件
                   </a>
                 </>

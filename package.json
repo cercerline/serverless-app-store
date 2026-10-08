@@ -19,6 +19,7 @@
     "test:users": "node --no-warnings --dns-result-order=ipv4first scripts/test-multiuser-e2e.mts",
     "test:presign": "node --no-warnings --dns-result-order=ipv4first scripts/test-presign.mts",
     "test:upsert": "node --no-warnings scripts/test-upsert.mts",
+    "test:download-name": "node --no-warnings --dns-result-order=ipv4first scripts/test-download-name.mts",
     "secret-scan": "node --no-warnings scripts/secret-scan.mts",
     "check:seeds": "node --no-warnings scripts/check-seed-apps.mts",
     "check:recorder": "node --no-warnings scripts/check-recorder.mts",

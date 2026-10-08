@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAppBySlug, incrementDownloads, isDatabaseConfigured } from "@/lib/db";
+import { buildDownloadName } from "@/lib/format";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -91,6 +92,11 @@ export async function GET(
   const storage = getStorage();
   const range = request.headers.get("range");
 
+  // A readable filename matters more on the redirect path than anywhere else,
+  // because the browser saves whatever the storage URL calls the object — and the
+  // object key is a generated string like `html/env-admin/pomodoro-muv99egh.html`.
+  const downloadName = buildDownloadName(app);
+
   // Preferred path: hand the visitor a direct link to object storage.
   //
   // The function then returns only a few hundred bytes instead of streaming the
@@ -100,7 +106,7 @@ export async function GET(
   //
   // Resumed transfers (`Range`) and clients that reach us through a different
   // path still work: they fall through to the streaming branch below.
-  const direct = range ? null : storage.signedDownloadUrl(app.apk_key, 300);
+  const direct = range ? null : storage.signedDownloadUrl(app.apk_key, 300, downloadName);
   if (direct) {
     if (shouldCount(clientKey(request), app.id)) {
       try {
@@ -145,14 +151,14 @@ export async function GET(
     }
   }
 
-  const version = app.version_name ? `-${app.version_name}` : "";
-  const filename = `${app.slug}${version}.apk`;
-
   const headers = new Headers();
-  headers.set("content-type", "application/vnd.android.package-archive");
+  // Always an opaque binary type: an HTML upload stored as text/html would be
+  // rendered in the tab rather than saved when the caller asked to download it.
+  headers.set("content-type", "application/octet-stream");
   headers.set(
     "content-disposition",
-    `attachment; filename="${filename.replace(/[^\w.-]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    `attachment; filename="${downloadName.replace(/[^\w.-]/g, "_")}"; ` +
+      `filename*=UTF-8''${encodeURIComponent(downloadName)}`,
   );
   headers.set("accept-ranges", "bytes");
   headers.set("cache-control", "public, max-age=0, must-revalidate");

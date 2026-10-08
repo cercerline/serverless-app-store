@@ -92,3 +92,23 @@ export function buildApkFilename(appName: string, versionName: string | null): s
     : "";
   return `${base}${version}.apk`;
 }
+
+/**
+ * The filename a visitor's browser should save, for either kind of app.
+ *
+ * Object keys are generated and unreadable (`html/env-admin/pomodoro-muv99egh.html`),
+ * so without this the visitor receives a file they cannot identify. HTML uploads
+ * keep an `.html` extension rather than being handed out as an `.apk`.
+ */
+export function buildDownloadName(app: {
+  name: string;
+  kind?: string | null;
+  version_name?: string | null;
+}): string {
+  if (app.kind === "html") {
+    const unsafe = /[\\/:*?"<>|\u0000-\u001f]/g;
+    const base = (app.name || "app").trim().replace(unsafe, "-").slice(0, 60).trim() || "app";
+    return `${base}.html`;
+  }
+  return buildApkFilename(app.name, app.version_name ?? null);
+}

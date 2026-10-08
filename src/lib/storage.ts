@@ -38,8 +38,11 @@ export interface Storage {
    * bytes travel from object storage to the visitor without passing through the
    * serverless function — which is what keeps large downloads off the platform's
    * bandwidth quota.
+   *
+   * `downloadName` sets the filename the visitor's browser saves, since a direct
+   * storage URL has no server in front of it to add a Content-Disposition header.
    */
-  signedDownloadUrl(key: string, expiresIn?: number): string | null;
+  signedDownloadUrl(key: string, expiresIn?: number, downloadName?: string | null): string | null;
   stat(key: string): Promise<StoredObject | null>;
   readRange(key: string, start: number, endInclusive: number): Promise<Uint8Array>;
   readAll(key: string): Promise<Uint8Array>;
@@ -128,8 +131,14 @@ class MemoryStorage implements Storage {
 
 class R2Storage implements Storage {
   readonly kind = "r2" as const;
+  private readonly config: R2Config;
 
-  constructor(private readonly config: R2Config) {}
+  // Written out rather than as a constructor parameter property: Node's built-in
+  // TypeScript stripping rejects that syntax, which would make this file
+  // impossible to import from any of the standalone scripts under scripts/.
+  constructor(config: R2Config) {
+    this.config = config;
+  }
 
   presignUpload(key: string, contentType: string): { url: string; method: "PUT" } {
     void contentType;
@@ -141,11 +150,17 @@ class R2Storage implements Storage {
     return `${this.config.publicBaseUrl.replace(/\/$/, "")}/${key.split("/").map(encodeURIComponent).join("/")}`;
   }
 
-  signedDownloadUrl(key: string, expiresIn = 300): string {
+  signedDownloadUrl(key: string, expiresIn = 300, downloadName?: string | null): string {
     // A public bucket domain is preferred when present (no expiry, cacheable),
     // otherwise fall back to a short-lived presigned URL, which works fine on a
     // private bucket because the signature carries the authorization.
-    return this.publicUrl(key) ?? presignGet(this.config, key, expiresIn);
+    //
+    // The public-domain branch cannot carry the response overrides, so when a
+    // specific filename was asked for, take the signed route even if a public
+    // base URL exists — a downloadable file with an unreadable name is not
+    // actually more useful than one that expires.
+    const direct = downloadName ? null : this.publicUrl(key);
+    return direct ?? presignGet(this.config, key, expiresIn, downloadName);
   }
 
   async stat(key: string): Promise<StoredObject | null> {

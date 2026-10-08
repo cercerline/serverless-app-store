@@ -216,9 +216,38 @@ export function presignPut(
   }).url;
 }
 
-/** Creates a presigned GET URL (used only when a public base URL is not configured). */
-export function presignGet(config: R2Config, key: string, expiresIn = 300): string {
-  return signRequest(config, { method: "GET", key, expiresIn }).url;
+/**
+ * Creates a presigned GET URL (used only when a public base URL is not configured).
+ *
+ * `downloadName` becomes a signed `response-content-disposition` override, which
+ * is the only way to control the filename when the browser is handed a direct
+ * storage URL: the object key is a generated, unreadable string, and the bucket
+ * is private, so there is no server in the path to set headers.
+ *
+ * These overrides must be part of the signature — adding them to the URL after
+ * signing produces a `SignatureDoesNotMatch` error, which is why they are passed
+ * through `query` rather than appended by the caller.
+ */
+export function presignGet(
+  config: R2Config,
+  key: string,
+  expiresIn = 300,
+  downloadName?: string | null,
+): string {
+  const query: Record<string, string> = {};
+
+  if (downloadName) {
+    // `filename*` carries the UTF-8 name (Chinese app names); the plain
+    // `filename` is the ASCII fallback for clients that ignore the extended form.
+    const ascii = downloadName.replace(/[^\w.-]/g, "_");
+    query["response-content-disposition"] =
+      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+    // Without this, an HTML upload stored as text/html would render in the tab
+    // instead of downloading.
+    query["response-content-type"] = "application/octet-stream";
+  }
+
+  return signRequest(config, { method: "GET", key, expiresIn, query }).url;
 }
 
 async function r2Fetch(

@@ -165,6 +165,34 @@ export async function POST(request: Request) {
     status = "pending";
   }
 
+  // -------------------------------------------------------------- file check
+  //
+  // An app with no file cannot be installed or opened, so publishing one gives the
+  // visitor a dead page that looks like the site is broken. This happens when an
+  // upload fails but the form is submitted anyway, which is easy to do and leaves
+  // no trace for the submitter.
+  //
+  // A brand-new record without a file is refused outright; an existing one is
+  // demoted to a draft rather than blocked, so its owner can still fix the
+  // metadata without first re-uploading.
+  const nextFileKey = input.apk_key ?? existing?.apk_key ?? null;
+
+  if (!nextFileKey) {
+    if (!existing) {
+      return NextResponse.json(
+        {
+          error:
+            "还没有上传应用文件。请先选择 APK 或 HTML 文件并等待上传完成，再点保存。",
+          code: "NO_FILE",
+        },
+        { status: 400 },
+      );
+    }
+    if (status === "published") {
+      status = "draft";
+    }
+  }
+
   const slug = await uniqueSlug(makeSlug(input.slug, input.name), existing?.id ?? input.id);
 
   // ------------------------------------------------------------------ screening
